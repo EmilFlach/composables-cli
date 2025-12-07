@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- NEW `target` command. You can now add new targets in an existing Compose Multiplatform project.
+
+## [0.2.0] - 2025-12-7
+
+### Added
 - You can now select the platforms when creating a new app.  
 
 ## [0.1.1] - 2025-12-6

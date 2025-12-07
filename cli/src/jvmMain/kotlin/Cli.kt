@@ -19,7 +19,7 @@ val WEB = "web"
 
 suspend fun main(args: Array<String>) {
     ComposablesCli()
-        .subcommands(Init(), Update())
+        .subcommands(Init(), Update(), Target())
         .main(args)
 
 //    cloneComposeApp(
@@ -55,12 +55,16 @@ class ComposablesCli : CliktCommand(name = "composables") {
 }
 
 class Update : CliktCommand("update") {
+
+    override fun help(context: Context): String = """
+        Updates the CLI tool with the latest version
+    """.trimIndent()
     override fun run() {
         try {
             val process = ProcessBuilder("bash", "-c", "curl -fsSL https://composables.com/get-composables.sh | bash")
                 .inheritIO()
                 .start()
-            
+
             val exitCode = process.waitFor()
             if (exitCode != 0) {
                 echo("Update failed with exit code: $exitCode", err = true)
@@ -226,6 +230,1027 @@ class Init : CliktCommand("init") {
             part.isNotEmpty() &&
                     part[0].isLetter() &&
                     part.all { char -> char.isLetterOrDigit() || char == '_' }
+        }
+    }
+}
+
+class Target : CliktCommand("target") {
+    override fun help(context: Context): String = """
+        Adds a new Kotlin target to the current Compose Multiplatform project.
+    """.trimIndent()
+
+    private val targetName by argument("target", help = "Target name to add (currently only 'android', 'jvm', 'ios', and 'web' are supported)")
+
+    override fun run() {
+        val workingDir = System.getProperty("user.dir")
+
+        if (!isValidComposeAppDirectory(workingDir)) {
+            echo("This doesn't appear to be a Compose Multiplatform project.")
+            echo("To create a new Compose app, run:")
+            echo("    composables init composeApp")
+            return
+        }
+
+        val composeAppBuildFile = File(workingDir, "composeApp/build.gradle.kts")
+        if (!composeAppBuildFile.exists()) {
+            echo("Could not find composeApp/build.gradle.kts file.")
+            return
+        }
+
+        when (targetName) {
+            "android" -> {
+                if (hasAndroidTarget(composeAppBuildFile)) {
+                    echo("Android target is already configured in this project.")
+                    return
+                }
+                try {
+                    addAndroidTarget(workingDir, composeAppBuildFile)
+                    echo("Android target added successfully!")
+                    echo("Run './gradlew build' to verify the configuration.")
+                } catch (e: Exception) {
+                    echo("Failed to add Android target: ${e.message}", err = true)
+                }
+            }
+            "jvm" -> {
+                if (hasJvmTarget(composeAppBuildFile)) {
+                    echo("JVM target is already configured in this project.")
+                    return
+                }
+                try {
+                    addJvmTarget(workingDir, composeAppBuildFile)
+                    echo("JVM target added successfully!")
+                    echo("Run './gradlew build' to verify the configuration.")
+                } catch (e: Exception) {
+                    echo("Failed to add JVM target: ${e.message}", err = true)
+                }
+            }
+            "ios" -> {
+                if (hasIosTarget(composeAppBuildFile)) {
+                    echo("iOS target is already configured in this project.")
+                    return
+                }
+                try {
+                    addIosTarget(workingDir, composeAppBuildFile)
+                    echo("iOS target added successfully!")
+                    echo("Run './gradlew build' to verify the configuration.")
+                } catch (e: Exception) {
+                    echo("Failed to add iOS target: ${e.message}", err = true)
+                }
+            }
+            "web" -> {
+                if (hasWebTarget(composeAppBuildFile)) {
+                    echo("Web target is already configured in this project.")
+                    return
+                }
+                try {
+                    addWebTarget(workingDir, composeAppBuildFile)
+                    echo("Web target added successfully!")
+                    echo("Run './gradlew build' to verify the configuration.")
+                } catch (e: Exception) {
+                    echo("Failed to add web target: ${e.message}", err = true)
+                }
+            }
+        }
+    }
+
+    private fun isValidComposeAppDirectory(directory: String): Boolean {
+        val dir = File(directory)
+
+        // Check for composeApp directory
+        val composeAppDir = File(dir, "composeApp")
+        if (!composeAppDir.exists() || !composeAppDir.isDirectory) {
+            return false
+        }
+
+        // Check for build.gradle.kts in composeApp
+        val composeAppBuildFile = File(composeAppDir, "build.gradle.kts")
+        if (!composeAppBuildFile.exists()) {
+            return false
+        }
+
+        // Check for root build.gradle.kts
+        val rootBuildFile = File(dir, "build.gradle.kts")
+        if (!rootBuildFile.exists()) {
+            return false
+        }
+
+        // Verify composeApp build.gradle.kts has Kotlin multiplatform configuration
+        val content = composeAppBuildFile.readText()
+        return content.contains("kotlin {") &&
+               content.contains("multiplatform") &&
+               content.contains("compose")
+    }
+
+    private fun hasAndroidTarget(buildFile: File): Boolean {
+        val content = buildFile.readText()
+        return content.contains("androidTarget {") || content.contains("android {")
+    }
+
+    private fun hasJvmTarget(buildFile: File): Boolean {
+        val content = buildFile.readText()
+        return content.contains("jvm()")
+    }
+
+    private fun hasIosTarget(buildFile: File): Boolean {
+        val content = buildFile.readText()
+        return content.contains("iosArm64()") || content.contains("iosSimulatorArm64()")
+    }
+
+    private fun hasWebTarget(buildFile: File): Boolean {
+        val content = buildFile.readText()
+        return content.contains("js(") || content.contains("wasmJs(")
+    }
+
+    private fun addAndroidTarget(workingDir: String, buildFile: File) {
+        var content = buildFile.readText()
+        val lines = content.lines().toMutableList()
+
+        // Add import if needed
+        if (!content.contains("import org.jetbrains.kotlin.gradle.dsl.JvmTarget")) {
+            val importLine = "import org.jetbrains.kotlin.gradle.dsl.JvmTarget"
+            // Find the last import line and add after it
+            val lastImportIndex = lines.indexOfLast { it.startsWith("import ") }
+            if (lastImportIndex >= 0) {
+                lines.add(lastImportIndex + 1, importLine)
+            } else {
+                // Add before the first non-empty, non-comment line
+                val firstCodeLine = lines.indexOfFirst { !it.trim().isEmpty() && !it.trim().startsWith("//") }
+                if (firstCodeLine >= 0) {
+                    lines.add(firstCodeLine, importLine)
+                }
+            }
+        }
+
+        // Append to plugins block
+        val pluginsCloseIndex = findPluginsBlockEnd(lines)
+        if (pluginsCloseIndex >= 0) {
+            lines.add(pluginsCloseIndex, "    alias(libs.plugins.android.application)")
+        }
+
+        // Append to kotlin block
+        val kotlinCloseIndex = findKotlinBlockEnd(lines)
+        if (kotlinCloseIndex >= 0) {
+            val androidTargetLines = listOf(
+                "",
+                "    androidTarget {",
+                "        compilerOptions {",
+                "            jvmTarget.set(JvmTarget.JVM_11)",
+                "        }",
+                "    }"
+            )
+            androidTargetLines.reversed().forEach { line ->
+                lines.add(kotlinCloseIndex, line)
+            }
+        }
+
+        // Append to sourceSets block
+        val sourceSetsCloseIndex = findSourceSetsBlockEnd(lines)
+        if (sourceSetsCloseIndex >= 0) {
+            val androidMainLines = listOf(
+                "",
+                "        androidMain.dependencies {",
+                "            implementation(compose.preview)",
+                "            implementation(compose.material3)",
+                "            implementation(libs.androidx.activitycompose)",
+                "        }"
+            )
+            androidMainLines.reversed().forEach { line ->
+                lines.add(sourceSetsCloseIndex, line)
+            }
+        }
+
+        // Add android block at the end
+        val namespace = extractNamespace(lines)
+        val androidBlock = listOf(
+            "",
+            "android {",
+            "    namespace = \"$namespace\"",
+            "    compileSdk = 36",
+            "",
+            "    defaultConfig {",
+            "        applicationId = \"$namespace\"",
+            "        minSdk = 24",
+            "        targetSdk = 36",
+            "        versionCode = 1",
+            "        versionName = \"1.0\"",
+            "    }",
+            "    packaging {",
+            "        resources {",
+            "            excludes += \"/META-INF/{AL2.0,LGPL2.1}\"",
+            "        }",
+            "    }",
+            "    buildTypes {",
+            "        getByName(\"release\") {",
+            "            isMinifyEnabled = false",
+            "        }",
+            "    }",
+            "    compileOptions {",
+            "        sourceCompatibility = JavaVersion.VERSION_11",
+            "        targetCompatibility = JavaVersion.VERSION_11",
+            "    }",
+            "}"
+        )
+        lines.addAll(androidBlock)
+
+        // Write updated content
+        buildFile.writeText(lines.joinToString("\n"))
+
+        // Create androidMain source set and MainActivity
+        createAndroidSourceSet(workingDir, namespace)
+
+        // Update root build.gradle.kts
+        updateRootBuildFile(workingDir)
+
+        // Update gradle.properties
+        updateGradleProperties(workingDir)
+
+        // Update libs.versions.toml
+        updateVersionsFile(workingDir)
+    }
+
+    private fun findPluginsBlockEnd(lines: List<String>): Int {
+        var depth = 0
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (line.startsWith("plugins {")) {
+                depth = 1
+                for (j in i + 1 until lines.size) {
+                    val currentLine = lines[j].trim()
+                    if (currentLine.contains("{")) depth++
+                    if (currentLine.contains("}")) depth--
+                    if (depth == 0) return j
+                }
+            }
+        }
+        return -1
+    }
+
+    private fun findKotlinBlockEnd(lines: List<String>): Int {
+        var depth = 0
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (line.startsWith("kotlin {")) {
+                depth = 1
+                for (j in i + 1 until lines.size) {
+                    val currentLine = lines[j].trim()
+                    if (currentLine.contains("{")) depth++
+                    if (currentLine.contains("}")) depth--
+                    if (depth == 0) return j
+                }
+            }
+        }
+        return -1
+    }
+
+    private fun findSourceSetsBlockEnd(lines: List<String>): Int {
+        var depth = 0
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (line.contains("sourceSets") && line.contains("{")) {
+                depth = 1
+                for (j in i + 1 until lines.size) {
+                    val currentLine = lines[j].trim()
+                    if (currentLine.contains("{")) depth++
+                    if (currentLine.contains("}")) depth--
+                    if (depth == 0) return j
+                }
+            }
+        }
+        return -1
+    }
+
+    private fun extractNamespace(lines: List<String>): String {
+        // Try to find existing namespace from android block or use a default
+        for (line in lines) {
+            if (line.trim().startsWith("namespace =")) {
+                return line.trim().substringAfter("namespace =").trim().removeSurrounding("\"")
+            }
+        }
+        return "com.example.app" // fallback
+    }
+
+    private fun updateRootBuildFile(workingDir: String) {
+        val rootBuildFile = File(workingDir, "build.gradle.kts")
+        if (!rootBuildFile.exists()) return
+
+        var content = rootBuildFile.readText()
+        if (!content.contains("android-application")) {
+            // Find the plugins block and add android plugin
+            val lines = content.lines().toMutableList()
+            val pluginsCloseIndex = findPluginsBlockEnd(lines)
+            if (pluginsCloseIndex >= 0) {
+                lines.add(pluginsCloseIndex, "    alias(libs.plugins.android.application) apply false")
+                rootBuildFile.writeText(lines.joinToString("\n"))
+            }
+        }
+    }
+
+    private fun updateVersionsFile(workingDir: String) {
+        val versionsFile = File(workingDir, "gradle/libs.versions.toml")
+        if (!versionsFile.exists()) return
+
+        var content = versionsFile.readText()
+
+        // Add Android versions if not present
+        if (!content.contains("agp =")) {
+            content = content.replace(
+                "[versions]",
+                """[versions]
+# Android
+agp = "8.11.2"
+android-compileSdk = "36"
+android-minSdk = "24"
+android-targetSdk = "36"
+androidx-activity = "1.11.0"
+"""
+            )
+        }
+
+        // Add Android libraries if not present
+        if (!content.contains("androidx-activitycompose")) {
+            content = content.replace(
+                "[libraries]",
+                """[libraries]
+androidx-activitycompose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+"""
+            )
+        }
+
+        // Add Android plugins if not present
+        if (!content.contains("android-application")) {
+            content = content.replace(
+                "[plugins]",
+                """[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+"""
+            )
+        }
+
+        versionsFile.writeText(content)
+    }
+
+    private fun updateGradleProperties(workingDir: String) {
+        val gradlePropertiesFile = File(workingDir, "gradle.properties")
+        if (!gradlePropertiesFile.exists()) return
+
+        var content = gradlePropertiesFile.readText()
+
+        // Add Android properties if not present
+        if (!content.contains("android.useAndroidX")) {
+            content += "\n\n#Android\nandroid.useAndroidX=true\nandroid.nonTransitiveRClass=true\n"
+        }
+
+        gradlePropertiesFile.writeText(content)
+    }
+
+    private fun createAndroidSourceSet(workingDir: String, namespace: String) {
+        val composeAppDir = File(workingDir, "composeApp")
+        val androidMainDir = File(composeAppDir, "src/androidMain/kotlin")
+        val packageDir = File(androidMainDir, namespace.replace(".", "/"))
+
+        // Create directories
+        packageDir.mkdirs()
+
+        // Create MainActivity.kt
+        val mainActivityFile = File(packageDir, "MainActivity.kt")
+        val mainActivityContent = """package $namespace
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            AndroidApp()
+        }
+    }
+}
+
+@Composable
+fun AndroidApp() {
+    MaterialTheme {
+        Text("Hello beautiful world")
+    }
+}
+
+@Preview
+@Composable
+fun DefaultPreview() {
+    AndroidApp()
+}
+"""
+        mainActivityFile.writeText(mainActivityContent)
+    }
+
+    private fun addJvmTarget(workingDir: String, buildFile: File) {
+        var content = buildFile.readText()
+        val lines = content.lines().toMutableList()
+
+        // Add import if needed
+        if (!content.contains("import org.jetbrains.compose.desktop.application.dsl.TargetFormat")) {
+            val importLine = "import org.jetbrains.compose.desktop.application.dsl.TargetFormat"
+            // Find the last import line and add after it
+            val lastImportIndex = lines.indexOfLast { it.startsWith("import ") }
+            if (lastImportIndex >= 0) {
+                lines.add(lastImportIndex + 1, importLine)
+            } else {
+                // Add before the first non-empty, non-comment line
+                val firstCodeLine = lines.indexOfFirst { !it.trim().isEmpty() && !it.trim().startsWith("//") }
+                if (firstCodeLine >= 0) {
+                    lines.add(firstCodeLine, importLine)
+                }
+            }
+        }
+
+        // Append to kotlin block
+        val kotlinCloseIndex = findKotlinBlockEnd(lines)
+        if (kotlinCloseIndex >= 0) {
+            lines.add(kotlinCloseIndex, "    jvm()")
+        }
+
+        // Append to sourceSets block
+        val sourceSetsCloseIndex = findSourceSetsBlockEnd(lines)
+        if (sourceSetsCloseIndex >= 0) {
+            val jvmMainLines = listOf(
+                "",
+                "        jvmMain.dependencies {",
+                "            implementation(compose.desktop.currentOs)",
+                "            implementation(compose.material3)",
+                "        }"
+            )
+            jvmMainLines.reversed().forEach { line ->
+                lines.add(sourceSetsCloseIndex, line)
+            }
+        }
+
+        // Add compose.desktop block at the end
+        val namespace = extractNamespace(lines)
+        val desktopBlock = listOf(
+            "",
+            "compose.desktop {",
+            "    application {",
+            "        mainClass = \"${namespace}.MainKt\"",
+            "",
+            "        nativeDistributions {",
+            "            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)",
+            "            packageName = \"${namespace}\"",
+            "            packageVersion = \"1.0.0\"",
+            "        }",
+            "    }",
+            "}"
+        )
+        lines.addAll(desktopBlock)
+
+        // Write updated content
+        buildFile.writeText(lines.joinToString("\n"))
+
+        // Create jvmMain source set and main function
+        createJvmSourceSet(workingDir, namespace)
+    }
+
+    private fun createJvmSourceSet(workingDir: String, namespace: String) {
+        val composeAppDir = File(workingDir, "composeApp")
+        val jvmMainDir = File(composeAppDir, "src/jvmMain/kotlin")
+        val packageDir = File(jvmMainDir, namespace.replace(".", "/"))
+
+        // Create directories
+        packageDir.mkdirs()
+
+        // Create main.desktop.kt
+        val mainFile = File(packageDir, "main.desktop.kt")
+        val mainContent = """@file:JvmName("MainKt")
+package $namespace
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.singleWindowApplication
+import org.jetbrains.compose.ui.tooling.preview.Preview
+
+fun main() = singleWindowApplication {
+    DesktopApp()
+}
+
+@Composable
+fun DesktopApp() {
+    MaterialTheme {
+        Scaffold {
+            Box(
+                modifier = Modifier
+                    .safeDrawingPadding()
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                ) {
+                    Text(
+                        text = "Hello Beautiful World!",
+                        style = MaterialTheme.typography.displayLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Go to main.desktop.kt to edit your app",
+                        style = MaterialTheme.typography.displayMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview
+@Composable
+fun DesktopAppPreview() {
+    DesktopApp()
+}
+"""
+        mainFile.writeText(mainContent)
+    }
+
+    private fun addIosTarget(workingDir: String, buildFile: File) {
+        var content = buildFile.readText()
+        val lines = content.lines().toMutableList()
+
+        // Append to kotlin block
+        val kotlinCloseIndex = findKotlinBlockEnd(lines)
+        if (kotlinCloseIndex >= 0) {
+            val iosTargetLines = listOf(
+                "",
+                "    listOf(",
+                "        iosArm64(),",
+                "        iosSimulatorArm64()",
+                "    ).forEach { iosTarget ->",
+                "        iosTarget.binaries.framework {",
+                "            baseName = \"ComposeApp\"",
+                "            isStatic = true",
+                "        }",
+                "    }"
+            )
+            iosTargetLines.reversed().forEach { line ->
+                lines.add(kotlinCloseIndex, line)
+            }
+        }
+
+        // Append to sourceSets block
+        val sourceSetsCloseIndex = findSourceSetsBlockEnd(lines)
+        if (sourceSetsCloseIndex >= 0) {
+            val iosMainLines = listOf(
+                "",
+                "        iosMain.dependencies {",
+                "            implementation(compose.material3)",
+                "        }"
+            )
+            iosMainLines.reversed().forEach { line ->
+                lines.add(sourceSetsCloseIndex, line)
+            }
+        }
+
+        // Write updated content
+        buildFile.writeText(lines.joinToString("\n"))
+
+        // Create iosMain source set
+        createIosSourceSet(workingDir, extractNamespace(lines))
+
+        // Copy iOS app directory
+        copyIosAppDirectory(workingDir)
+    }
+
+    private fun createIosSourceSet(workingDir: String, namespace: String) {
+        val composeAppDir = File(workingDir, "composeApp")
+        val iosMainDir = File(composeAppDir, "src/iosMain/kotlin")
+        val packageDir = iosMainDir
+
+        // Create directories
+        packageDir.mkdirs()
+
+        // Create IosApp.kt
+        val mainFile = File(packageDir, "MainViewController.kt")
+        val mainContent = """import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.window.ComposeUIViewController
+
+fun MainViewController() = ComposeUIViewController { IosApp() }
+
+@Composable
+fun IosApp() {
+    MaterialTheme {
+        Scaffold {
+            Box(
+                modifier = Modifier
+                    .safeDrawingPadding()
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                ) {
+                    Text(
+                        text = "Hello Beautiful World!",
+                        style = MaterialTheme.typography.displayLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Go to MainViewController.kt to edit your app",
+                        style = MaterialTheme.typography.displayMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview
+@Composable
+fun IosAppPreview() {
+    IosApp()
+}
+"""
+        mainFile.writeText(mainContent)
+    }
+
+    private fun addWebTarget(workingDir: String, buildFile: File) {
+        var content = buildFile.readText()
+        val lines = content.lines().toMutableList()
+
+        // Add imports if needed
+        if (!content.contains("import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl")) {
+            val importLine = "import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl"
+            val lastImportIndex = lines.indexOfLast { it.startsWith("import ") }
+            if (lastImportIndex >= 0) {
+                lines.add(lastImportIndex + 1, importLine)
+            } else {
+                val firstCodeLine = lines.indexOfFirst { !it.trim().isEmpty() && !it.trim().startsWith("//") }
+                if (firstCodeLine >= 0) {
+                    lines.add(firstCodeLine, importLine)
+                }
+            }
+        }
+
+        if (!content.contains("import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig")) {
+            val importLine = "import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig"
+            val lastImportIndex = lines.indexOfLast { it.startsWith("import ") }
+            if (lastImportIndex >= 0) {
+                lines.add(lastImportIndex + 1, importLine)
+            } else {
+                val firstCodeLine = lines.indexOfFirst { !it.trim().isEmpty() && !it.trim().startsWith("//") }
+                if (firstCodeLine >= 0) {
+                    lines.add(firstCodeLine, importLine)
+                }
+            }
+        }
+
+        // Append to kotlin block
+        val kotlinCloseIndex = findKotlinBlockEnd(lines)
+        if (kotlinCloseIndex >= 0) {
+            val webTargetLines = listOf(
+                "",
+                "    js {",
+                "        browser()",
+                "        binaries.executable()",
+                "    }",
+                "",
+                "    @OptIn(ExperimentalWasmDsl::class)",
+                "    wasmJs {",
+                "        browser {",
+                "            val rootDirPath = project.rootDir.path",
+                "            val projectDirPath = project.projectDir.path",
+                "            commonWebpackConfig {",
+                "                outputFileName = \"composeApp.js\"",
+                "                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {",
+                "                    static = (static ?: mutableListOf()).apply {",
+                "                        add(rootDirPath)",
+                "                        add(projectDirPath)",
+                "                    }",
+                "                }",
+                "            }",
+                "        }",
+                "        binaries.executable()",
+                "    }"
+            )
+            webTargetLines.reversed().forEach { line ->
+                lines.add(kotlinCloseIndex, line)
+            }
+        }
+
+        // Append to sourceSets block
+        val sourceSetsCloseIndex = findSourceSetsBlockEnd(lines)
+        if (sourceSetsCloseIndex >= 0) {
+            val webMainLines = listOf(
+                "",
+                "        jsMain.dependencies {",
+                "            implementation(compose.material3)",
+                "        }"
+            )
+            webMainLines.reversed().forEach { line ->
+                lines.add(sourceSetsCloseIndex, line)
+            }
+        }
+
+        // Write updated content
+        buildFile.writeText(lines.joinToString("\n"))
+
+        // Create web source sets
+        createWebSourceSets(workingDir, extractNamespace(lines))
+
+        // Copy webpack.config.d directory
+        copyWebpackConfigDirectory(workingDir)
+
+        // Copy resources directory
+        copyResourcesDirectory(workingDir)
+    }
+
+    private fun createWebSourceSets(workingDir: String, namespace: String) {
+        val composeAppDir = File(workingDir, "composeApp")
+
+        // Create webMain source set
+        val webMainDir = File(composeAppDir, "src/webMain/kotlin")
+        val webPackageDir = webMainDir
+        webPackageDir.mkdirs()
+
+        val webMainFile = File(webPackageDir, "main.web.kt")
+        val webMainContent = """import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.window.ComposeViewport
+import org.jetbrains.compose.ui.tooling.preview.Preview
+
+@OptIn(ExperimentalComposeUiApi::class)
+fun main() {
+    ComposeViewport {
+        WebApp()
+    }
+}
+
+@Composable
+fun WebApp() {
+    MaterialTheme {
+        Scaffold {
+            Box(
+                modifier = Modifier
+                    .safeDrawingPadding()
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                ) {
+                    Text(
+                        text = "Hello Beautiful World!",
+                        style = MaterialTheme.typography.displayLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Go to main.web.kt to edit your app",
+                        style = MaterialTheme.typography.displayMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview
+@Composable
+fun WebAppPreview() {
+    WebApp()
+}
+"""
+        webMainFile.writeText(webMainContent)
+    }
+
+    private fun copyWebpackConfigDirectory(workingDir: String) {
+        val targetDir = File(workingDir, "composeApp/webpack.config.d")
+
+        fun copyResource(resourcePath: String, targetFile: File) {
+            val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+            if (inputStream != null) {
+                targetFile.parentFile?.mkdirs()
+                inputStream.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+
+        fun listResources(path: String): List<String> {
+            val resources = mutableListOf<String>()
+            val resourceUrl = object {}.javaClass.getResource(path)
+
+            if (resourceUrl != null) {
+                when (resourceUrl.protocol) {
+                    "file" -> {
+                        val dir = File(resourceUrl.toURI())
+                        dir.walkTopDown().forEach { file ->
+                            if (file.isFile) {
+                                val relativePath = file.relativeTo(dir)
+                                resources.add("$path/${relativePath.path}")
+                            }
+                        }
+                    }
+                    "jar" -> {
+                        val jarPath = resourceUrl.path.substringBefore("!")
+                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val entries = jarFile.entries()
+
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                                resources.add("/${entry.name}")
+                            }
+                        }
+                        jarFile.close()
+                    }
+                }
+            }
+
+            return resources
+        }
+
+        val resources = listResources("/project/composeApp/webpack.config.d")
+        resources.forEach { resourcePath ->
+            val targetPath = resourcePath.removePrefix("/project/composeApp/webpack.config.d/")
+            val targetFile = targetDir.resolve(targetPath)
+            copyResource(resourcePath, targetFile)
+        }
+    }
+
+    private fun copyResourcesDirectory(workingDir: String) {
+        val targetDir = File(workingDir, "composeApp/src/webMain/resources")
+
+        fun copyResource(resourcePath: String, targetFile: File) {
+            val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+            if (inputStream != null) {
+                targetFile.parentFile?.mkdirs()
+                inputStream.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+
+        fun listResources(path: String): List<String> {
+            val resources = mutableListOf<String>()
+            val resourceUrl = object {}.javaClass.getResource(path)
+
+            if (resourceUrl != null) {
+                when (resourceUrl.protocol) {
+                    "file" -> {
+                        val dir = File(resourceUrl.toURI())
+                        dir.walkTopDown().forEach { file ->
+                            if (file.isFile) {
+                                val relativePath = file.relativeTo(dir)
+                                resources.add("$path/${relativePath.path}")
+                            }
+                        }
+                    }
+                    "jar" -> {
+                        val jarPath = resourceUrl.path.substringBefore("!")
+                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val entries = jarFile.entries()
+
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                                resources.add("/${entry.name}")
+                            }
+                        }
+                        jarFile.close()
+                    }
+                }
+            }
+
+            return resources
+        }
+
+        val resources = listResources("/project/composeApp/src/webMain/resources")
+        resources.forEach { resourcePath ->
+            val targetPath = resourcePath.removePrefix("/project/composeApp/src/webMain/resources/")
+            val targetFile = targetDir.resolve(targetPath)
+            copyResource(resourcePath, targetFile)
+
+            // Replace placeholders in text files
+            if (targetFile.name.endsWith(".html") || targetFile.name.endsWith(".css") || targetFile.name.endsWith(".js")) {
+                try {
+                    val content = targetFile.readText()
+                    var updatedContent = content.replace("{{app_name}}", "ComposeApp")
+                    if (content != updatedContent) {
+                        targetFile.writeText(updatedContent)
+                    }
+                } catch (e: Exception) {
+                    // Skip binary files
+                }
+            }
+        }
+    }
+
+    private fun copyIosAppDirectory(workingDir: String) {
+        val targetDir = File(workingDir, "iosApp")
+
+        fun copyResource(resourcePath: String, targetFile: File) {
+            val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+            if (inputStream != null) {
+                targetFile.parentFile?.mkdirs()
+                inputStream.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+
+        fun listResources(path: String): List<String> {
+            val resources = mutableListOf<String>()
+            val resourceUrl = object {}.javaClass.getResource(path)
+
+            if (resourceUrl != null) {
+                when (resourceUrl.protocol) {
+                    "file" -> {
+                        val dir = File(resourceUrl.toURI())
+                        dir.walkTopDown().forEach { file ->
+                            if (file.isFile) {
+                                val relativePath = file.relativeTo(dir)
+                                resources.add("$path/${relativePath.path}")
+                            }
+                        }
+                    }
+                    "jar" -> {
+                        val jarPath = resourceUrl.path.substringBefore("!")
+                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val entries = jarFile.entries()
+
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                                resources.add("/${entry.name}")
+                            }
+                        }
+                        jarFile.close()
+                    }
+                }
+            }
+
+            return resources
+        }
+
+        val resources = listResources("/project/iosApp")
+        resources.forEach { resourcePath ->
+            val targetPath = resourcePath.removePrefix("/project/iosApp/")
+            val targetFile = targetDir.resolve(targetPath)
+            copyResource(resourcePath, targetFile)
         }
     }
 }
@@ -546,7 +1571,7 @@ android.useAndroidX=true
 
                 val composeDesktop = if (targets.contains("jvm")) """compose.desktop {
     application {
-        mainClass = "{{namespace}}.MainKt"
+        mainClass = "{{namespace}}.MainDesktopKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

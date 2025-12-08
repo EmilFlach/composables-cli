@@ -52,6 +52,11 @@ kotlin {
                 implementation("com.github.ajalt.clikt:clikt:5.0.3")
             }
         }
+        val jvmTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 

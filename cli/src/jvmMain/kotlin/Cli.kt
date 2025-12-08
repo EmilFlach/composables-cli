@@ -23,20 +23,6 @@ suspend fun main(args: Array<String>) {
     ComposablesCli()
         .subcommands(Init(), Update(), Target())
         .main(args)
-
-//    cloneComposeApp(
-//        targetDir = "/Users/alexstyl/projects/composables-cli",
-//        dirName = "composeApp",
-//        packageName = "com.composables",
-//        moduleName = "app",
-//        appName = "The App",
-//        targets = setOf(
-////            ANDROID,
-////            JVM,
-//            IOS,
-////            WEB
-//        )
-//    )
 }
 
 class ComposablesCli : CliktCommand(name = "composables") {
@@ -81,14 +67,14 @@ class Update : CliktCommand("update") {
 
 class Init : CliktCommand("init") {
     override fun help(context: Context): String = """
-        Creates a new Compose Multiplatform app.
+        Initializes a new Compose Multiplatform module to the specified <directory> path.
     """.trimIndent()
 
-    private val dirName by argument("directory", help = "Directory name for the new project").optional()
+    private val directory by argument("directory", help = "The directory path to create the new module in").optional()
 
     override fun run() {
         val workingDir = System.getProperty("user.dir")
-        val projectName = dirName.orEmpty()
+        val projectName = directory.orEmpty()
         if (projectName.isBlank()) {
             debugln { "Please specify the project directory:" }
             infoln { "composables init <project-directory>" }
@@ -97,16 +83,60 @@ class Init : CliktCommand("init") {
             infoln { "composables init composeApp" }
             return
         }
-        val target = File(workingDir).resolve(projectName)
+        val target = if (projectName == ".") File(workingDir) else File(workingDir).resolve(projectName)
 
         // Check if we can create the directory first
         if (target.exists()) {
             if (target.listFiles()?.isEmpty() == true) {
                 target.deleteRecursively()
             } else {
-                echo("The directory $projectName already exists and is not empty.")
-                echo("Try a new directory name or delete the existing one before trying to create a new app.")
-                return
+                // Check if it's a Gradle project
+                val isGradleProject = File(target, "build.gradle.kts").exists() ||
+                        File(target, "build.gradle").exists() ||
+                        File(target, "settings.gradle.kts").exists() ||
+                        File(target, "settings.gradle").exists()
+
+                if (isGradleProject) {
+                    print("Gradle project detected. This will add a new module to your existing project. Is this what you want? y/n ")
+                    val response = readln().trim().lowercase()
+                    if (response != "y" && response != "yes") {
+                        echo("Operation cancelled.")
+                        return
+                    }
+                    val moduleName = readUniqueModuleName(target)
+                    val appName = readAppName()
+                    val namespace = readNamespace()
+                    val targets = readTargets()
+
+                    // Create only the module directory and files
+                    createModuleOnly(
+                        targetDir = target.absolutePath,
+                        moduleName = moduleName,
+                        packageName = namespace,
+                        appName = appName,
+                        targets = targets
+                    )
+
+                    // Add module to settings.gradle.kts
+                    addModuleToSettings(target.absolutePath, moduleName)
+
+                    // Update version catalog if needed
+                    updateVersionCatalog(target.absolutePath, targets)
+
+                    // Update root build.gradle.kts with required plugins
+                    updateRootBuildFile(target.absolutePath, targets)
+
+                    // Create iOS app directory if iOS target is selected
+                    if (targets.contains("ios")) {
+                        createIosAppDirectory(target.absolutePath, moduleName)
+                    }
+                    return
+                } else {
+                    val dirName = if (projectName == ".") "The current directory" else "The directory $projectName"
+                    echo("$dirName is not empty and does not contain a Gradle project.")
+                    echo("Try a new directory path or delete the existing one before trying to initialize a new module.")
+                    return
+                }
             }
         }
 
@@ -115,12 +145,12 @@ class Init : CliktCommand("init") {
             return
         }
 
+        val moduleName = readModuleName()
         val appName = readAppName()
         val namespace = readNamespace()
         val targets = readTargets()
-        val moduleName = readModuleName()
 
-        cloneComposeApp(
+        cloneGradleProjectAndPrint(
             targetDir = workingDir,
             dirName = projectName,
             packageName = namespace,
@@ -234,6 +264,34 @@ class Init : CliktCommand("init") {
 
             if (!isValidModuleName(moduleName)) {
                 echo("Invalid module name. Must start with a letter and contain only letters, digits, hyphens, or underscores")
+                continue
+            }
+
+            return moduleName
+        }
+    }
+
+    private fun readUniqueModuleName(targetDir: File): String {
+        while (true) {
+            print("Enter module name (default: composeApp): ")
+            val moduleName = readln().trim()
+
+            if (moduleName.isEmpty()) {
+                if (File(targetDir, "composeApp").exists()) {
+                    echo("Module name 'composeApp' already exists. Please choose a different name.")
+                    continue
+                }
+                return "composeApp"
+            }
+
+            if (!isValidModuleName(moduleName)) {
+                echo("Invalid module name. Must start with a letter and contain only letters, digits, hyphens, or underscores")
+                continue
+            }
+
+            val moduleDir = File(targetDir, moduleName)
+            if (moduleDir.exists()) {
+                echo("Module '$moduleName' already exists. Please choose a different name.")
                 continue
             }
 
@@ -1526,6 +1584,7 @@ fun WebAppPreview() {
                     val content = targetFile.readText()
                     var updatedContent = content.replace("{{module_name}}", moduleName)
                     updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
+                    updatedContent = updatedContent.replace("{{target_name}}", "${toCamelCase(moduleName)}.app")
                     // For target command, use hardcoded defaults since appName/namespace aren't in scope
                     updatedContent = updatedContent.replace("{{app_name}}", "My App")
                     updatedContent = updatedContent.replace("{{namespace}}", "com.example.app")
@@ -1548,7 +1607,42 @@ val gradleScript: String
             "./gradlew"
     }
 
-fun cloneComposeApp(
+fun cloneGradleProjectAndPrint(
+    targetDir: String,
+    dirName: String,
+    packageName: String,
+    appName: String,
+    targets: Set<String>,
+    moduleName: String
+) {
+    cloneGradleProject(
+        targetDir,
+        dirName,
+        packageName,
+        appName,
+        targets,
+        moduleName
+    )
+    // Log project configuration summary
+    infoln { "" }
+    infoln { "Project Configuration:" }
+    infoln { "\tApp Name: $appName" }
+    infoln { "\tPackage: $packageName" }
+    infoln { "\tCompose Module: $moduleName" }
+    infoln { "\tTargets: ${targets.joinToString(", ")}" }
+    infoln { "" }
+
+    debugln { "Success! Your new Compose app is ready at ${File(targetDir).absolutePath}" }
+    debugln { "Start by typing:" }
+    infoln { "" }
+    infoln { "\tcd $dirName" }
+    infoln { "\t$gradleScript run" }
+    infoln { "" }
+    debugln { "Happy coding!" }
+}
+
+
+fun cloneGradleProject(
     targetDir: String,
     dirName: String,
     packageName: String,
@@ -1628,6 +1722,7 @@ fun cloneComposeApp(
         var targetPath = resourcePath.removePrefix("/project/")
 
         // Skip iOS directory if iOS target is not selected
+        val iosAppName = "ios${toCamelCase(moduleName)}"
         if (!targets.contains("ios") && targetPath.startsWith("iosApp/")) {
             return@forEach
         }
@@ -1658,6 +1753,13 @@ fun cloneComposeApp(
 
         // Replace composeApp with the actual module name in file paths
         targetPath = targetPath.replace("composeApp", moduleName)
+
+        // Replace only the top-level iosApp directory with the dynamic iOS app name
+        if (targetPath.startsWith("iosApp/")) {
+            val newPath = iosAppName + "/" + targetPath.removePrefix("iosApp/")
+//                .replace("iosApp/", iosAppName + "/")
+            targetPath = newPath
+        }
 
         val targetFile = target.resolve(targetPath)
         copyResource(resourcePath, targetFile)
@@ -1947,6 +2049,7 @@ android.useAndroidX=true
                 updatedContent = updatedContent.replace("{{module_name}}", moduleName)
                 updatedContent = updatedContent.replace("{{app_name}}", appName)
                 updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
+                updatedContent = updatedContent.replace("{{target_name}}", toCamelCase(moduleName) + ".app")
                 if (content != updatedContent) {
                     file.writeText(updatedContent.trim() + "\n")
                 }
@@ -1976,20 +2079,635 @@ android.useAndroidX=true
         }
     }
 
-    // Log project configuration summary
+}
+
+fun updateRootBuildFile(
+    targetDir: String,
+    targets: Set<String>
+) {
+    val buildFile = File(targetDir, "build.gradle.kts")
+    if (!buildFile.exists()) {
+        warnln { "build.gradle.kts not found in $targetDir" }
+        return
+    }
+
+    var content = buildFile.readText()
+    var modified = false
+
+    // Find plugins block or create one
+    val lines = content.lines().toMutableList()
+    val pluginsBlockIndex = lines.indexOfFirst { it.trim().startsWith("plugins {") }
+
+    if (pluginsBlockIndex >= 0) {
+        // Find end of plugins block
+        var pluginsEndIndex = pluginsBlockIndex + 1
+        var depth = 1
+        while (pluginsEndIndex < lines.size && depth > 0) {
+            val line = lines[pluginsEndIndex].trim()
+            if (line.contains("{")) depth++
+            if (line.contains("}")) depth--
+            pluginsEndIndex++
+        }
+
+        // Extract plugins content for checking
+        val pluginsContent = lines.subList(pluginsBlockIndex, pluginsEndIndex).joinToString("\n")
+        val requiredPlugins = mutableListOf<String>()
+
+        // Check for exact plugin references, not partial matches
+        if (!pluginsContent.contains("libs.plugins.jetbrains.kotlin.multiplatform")) {
+            requiredPlugins.add("    alias(libs.plugins.jetbrains.kotlin.multiplatform) apply false")
+        }
+        if (!pluginsContent.contains("libs.plugins.jetbrains.compose")) {
+            requiredPlugins.add("    alias(libs.plugins.jetbrains.compose) apply false")
+        }
+        if (!pluginsContent.contains("libs.plugins.jetbrains.compose.compiler")) {
+            requiredPlugins.add("    alias(libs.plugins.jetbrains.compose.compiler) apply false")
+        }
+        if (!pluginsContent.contains("libs.plugins.jetbrains.compose.hotreload")) {
+            requiredPlugins.add("    alias(libs.plugins.jetbrains.compose.hotreload) apply false")
+        }
+        if (targets.contains("android") && !pluginsContent.contains("libs.plugins.android.application")) {
+            requiredPlugins.add("    alias(libs.plugins.android.application) apply false")
+        }
+
+        if (requiredPlugins.isNotEmpty()) {
+            // Add missing plugins before closing brace
+            requiredPlugins.reversed().forEach { plugin ->
+                lines.add(pluginsEndIndex - 1, plugin)
+            }
+            modified = true
+        }
+    } else {
+        // Create plugins block at the beginning
+        val requiredPlugins = mutableListOf<String>()
+        requiredPlugins.add("plugins {")
+        requiredPlugins.add("    alias(libs.plugins.jetbrains.kotlin.multiplatform) apply false")
+        requiredPlugins.add("    alias(libs.plugins.jetbrains.compose) apply false")
+        requiredPlugins.add("    alias(libs.plugins.jetbrains.compose.compiler) apply false")
+        requiredPlugins.add("    alias(libs.plugins.jetbrains.compose.hotreload) apply false")
+        if (targets.contains("android")) {
+            requiredPlugins.add("    alias(libs.plugins.android.application) apply false")
+        }
+        requiredPlugins.add("}")
+
+        // Add at the beginning of file
+        requiredPlugins.reversed().forEach { line ->
+            lines.add(0, line)
+        }
+        modified = true
+    }
+
+    if (modified) {
+        buildFile.writeText(lines.joinToString("\n"))
+    }
+}
+
+fun updateVersionCatalog(
+    targetDir: String,
+    targets: Set<String>
+) {
+    val versionsFile = File(targetDir, "gradle/libs.versions.toml")
+    if (!versionsFile.exists()) {
+        warnln { "libs.versions.toml not found in $targetDir/gradle/" }
+        return
+    }
+
+    var content = versionsFile.readText()
+    var modified = false
+
+    // Parse existing sections
+    val versionsSection = extractSection(content, "versions")
+    val librariesSection = extractSection(content, "libraries")
+    val pluginsSection = extractSection(content, "plugins")
+
+    // Add required versions if not present
+    val newVersions = mutableListOf<String>()
+    if (!versionsSection.contains("kotlin")) {
+        newVersions.add("kotlin = \"2.1.0\"")
+    }
+    if (!versionsSection.contains("compose")) {
+        newVersions.add("compose = \"2024.12.01\"")
+    }
+
+    // Add Android versions if android target is selected
+    if (targets.contains("android")) {
+        if (!versionsSection.contains("agp")) newVersions.add("agp = \"8.11.2\"")
+        if (!versionsSection.contains("android-compileSdk")) newVersions.add("android-compileSdk = \"36\"")
+        if (!versionsSection.contains("android-minSdk")) newVersions.add("android-minSdk = \"24\"")
+        if (!versionsSection.contains("android-targetSdk")) newVersions.add("android-targetSdk = \"36\"")
+        if (!versionsSection.contains("androidx-activity")) newVersions.add("androidx-activity = \"1.11.0\"")
+    }
+
+    // Add required libraries if not present
+    val newLibraries = mutableListOf<String>()
+    if (targets.contains("android") && !librariesSection.contains("androidx-activitycompose")) {
+        newLibraries.add("androidx-activitycompose = { module = \"androidx.activity:activity-compose\", version.ref = \"androidx-activity\" }")
+    }
+
+    // Add required plugins if not present
+    val newPlugins = mutableListOf<String>()
+    if (!pluginsSection.contains("jetbrains-kotlin-multiplatform")) {
+        newPlugins.add("jetbrains-kotlin-multiplatform = { id = \"org.jetbrains.kotlin.multiplatform\", version.ref = \"kotlin\" }")
+    }
+    if (!pluginsSection.contains("jetbrains-compose")) {
+        newPlugins.add("jetbrains-compose = { id = \"org.jetbrains.compose\", version.ref = \"compose\" }")
+    }
+    if (!pluginsSection.contains("jetbrains-compose-compiler")) {
+        newPlugins.add("jetbrains-compose-compiler = { id = \"org.jetbrains.kotlin.plugin.compose\", version.ref = \"kotlin\" }")
+    }
+    if (!pluginsSection.contains("jetbrains-compose-hotreload")) {
+        newPlugins.add("jetbrains-compose-hotreload = { id = \"org.jetbrains.compose.hot-reload\", version.ref = \"compose\" }")
+    }
+    if (targets.contains("android") && !pluginsSection.contains("android-application")) {
+        newPlugins.add("android-application = { id = \"com.android.application\", version.ref = \"agp\" }")
+    }
+
+    // Build updated content
+    if (newVersions.isNotEmpty() || newLibraries.isNotEmpty() || newPlugins.isNotEmpty()) {
+        modified = true
+
+        // Update versions section
+        if (newVersions.isNotEmpty()) {
+            content = updateSection(content, "versions", newVersions)
+        }
+
+        // Update libraries section
+        if (newLibraries.isNotEmpty()) {
+            content = updateSection(content, "libraries", newLibraries)
+        }
+
+        // Update plugins section
+        if (newPlugins.isNotEmpty()) {
+            content = updateSection(content, "plugins", newPlugins)
+        }
+    }
+
+    if (modified) {
+        versionsFile.writeText(content)
+    }
+}
+
+private fun extractSection(content: String, sectionName: String): String {
+    val startPattern = Regex("""\[$sectionName\]""")
+    val startMatch = startPattern.find(content)
+    if (startMatch == null) return ""
+
+    val startIndex = startMatch.range.last + 1
+    val nextSectionPattern = Regex("""\[[^\]]+\]""")
+    val nextMatch = nextSectionPattern.find(content, startIndex)
+
+    val endIndex = if (nextMatch != null) nextMatch.range.first else content.length
+    return content.substring(startIndex, endIndex)
+}
+
+private fun updateSection(content: String, sectionName: String, newEntries: List<String>): String {
+    val lines = content.lines().toMutableList()
+    val sectionIndex = lines.indexOfFirst { it.trim() == "[$sectionName]" }
+
+    if (sectionIndex >= 0) {
+        // Add new entries after section header
+        newEntries.reversed().forEach { entry ->
+            lines.add(sectionIndex + 1, entry)
+        }
+    } else {
+        // Create new section at end
+        lines.add("")
+        lines.add("[$sectionName]")
+        newEntries.forEach { entry ->
+            lines.add(entry)
+        }
+    }
+
+    return lines.joinToString("\n")
+}
+
+fun addModuleToSettings(
+    targetDir: String,
+    moduleName: String
+) {
+    val settingsFile = File(targetDir, "settings.gradle.kts")
+    if (!settingsFile.exists()) {
+        warnln { "settings.gradle.kts not found in $targetDir" }
+        return
+    }
+
+    val content = settingsFile.readText()
+    val includePattern = Regex("""include\s*\(\s*["']([^"']+)["']\s*\)""")
+    val existingModules = includePattern.findAll(content).map { it.groupValues[1] }.toSet()
+
+    if (existingModules.contains(":$moduleName")) {
+        warnln { "Module ':$moduleName' is already included in settings.gradle.kts" }
+        return
+    }
+
+    val lines = content.lines().toMutableList()
+
+    // Add new include statement at the end
+    lines.add("")
+    lines.add("include(\":$moduleName\")")
+
+    settingsFile.writeText(lines.joinToString("\n"))
+}
+
+fun createModuleOnly(
+    targetDir: String,
+    moduleName: String,
+    packageName: String,
+    appName: String,
+    targets: Set<String>
+) {
+    val moduleDir = File(targetDir, moduleName)
+
+    fun copyResource(resourcePath: String, targetFile: File) {
+        val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+        if (inputStream != null) {
+            targetFile.parentFile?.mkdirs()
+            inputStream.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        } else {
+            error("Resource not found: $resourcePath")
+            debugln { "Resource not found: $resourcePath" }
+        }
+    }
+
+    fun listResources(path: String): List<String> {
+        val resources = mutableListOf<String>()
+        val resourceUrl = object {}.javaClass.getResource(path)
+
+        if (resourceUrl != null) {
+            when (resourceUrl.protocol) {
+                "file" -> {
+                    val dir = File(resourceUrl.toURI())
+                    dir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val relativePath = file.relativeTo(dir)
+                            resources.add("$path/${relativePath.path}")
+                        }
+                    }
+                }
+
+                "jar" -> {
+                    val jarPath = resourceUrl.path.substringBefore("!")
+                    val jarFile = JarFile(File(jarPath.substringAfter("file:")))
+                    val entries = jarFile.entries()
+
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                            resources.add("/${entry.name}")
+                        }
+                    }
+                    jarFile.close()
+                }
+            }
+        }
+
+        return resources
+    }
+
+    // Copy only the module contents (not the entire project)
+    val resources = listResources("/project/composeApp")
+    resources.forEach { resourcePath ->
+        var targetPath = resourcePath.removePrefix("/project/composeApp/")
+
+        // Skip source set directories if corresponding target is not selected
+        val isInsideAKotlinSourceSet = targetPath.startsWith("src/")
+        if (isInsideAKotlinSourceSet) {
+            val sourceSetType = targetPath.substringAfter("src/").substringBefore("/")
+            when (sourceSetType) {
+                "androidMain" -> if (!targets.contains("android")) return@forEach
+                "iosMain" -> if (!targets.contains("ios")) return@forEach
+                "jvmMain" -> if (!targets.contains("jvm")) return@forEach
+                "jsMain" -> if (!targets.contains("web")) return@forEach
+                "wasmJsMain" -> if (!targets.contains("web")) return@forEach
+                "webMain" -> if (!targets.contains("web")) return@forEach
+                "commonMain" -> Unit
+                else -> error("Unknown target: $targetPath")
+            }
+        }
+
+        // Skip webpack.config.d directory if web target is not selected
+        if (!targets.contains("web") && targetPath.startsWith("webpack.config.d/")) {
+            return@forEach
+        }
+
+        // Replace org.example.project with the actual namespace in file paths
+        targetPath = targetPath.replace("org/example/project", packageName.replace(".", "/"))
+
+        val targetFile = moduleDir.resolve(targetPath)
+        copyResource(resourcePath, targetFile)
+    }
+
+    // Replace placeholders in text files only (skip binary files)
+    moduleDir.walkTopDown().forEach { file ->
+        if (file.isFile) {
+            // Skip binary files and known non-text files
+            if (file.name.endsWith(".jar") ||
+                file.name.endsWith(".png") ||
+                file.name.endsWith(".jpg") ||
+                file.name.endsWith(".jpeg") ||
+                file.name.endsWith(".ico") ||
+                file.name.endsWith(".icns") ||
+                file.name.endsWith(".class")
+            ) {
+                return@forEach
+            }
+
+            try {
+                val content = file.readText()
+                var updatedContent = content.replace("{{app_name}}", appName)
+
+                // Build imports block
+                val imports = mutableListOf<String>()
+                if (targets.contains("jvm")) {
+                    imports.add("import org.jetbrains.compose.desktop.application.dsl.TargetFormat")
+                }
+                if (targets.contains("web")) {
+                    imports.add("import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl")
+                    imports.add("import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig")
+                }
+                if (targets.contains("android")) {
+                    imports.add("import org.jetbrains.kotlin.gradle.dsl.JvmTarget")
+                }
+                val importsBlock = if (imports.isNotEmpty()) imports.joinToString("\n") + "\n" else ""
+
+                // Build plugins block
+                val plugins = mutableListOf<String>()
+                plugins.add("    alias(libs.plugins.jetbrains.kotlin.multiplatform)")
+                plugins.add("    alias(libs.plugins.jetbrains.compose)")
+                plugins.add("    alias(libs.plugins.jetbrains.compose.compiler)")
+                plugins.add("    alias(libs.plugins.jetbrains.compose.hotreload)")
+                if (targets.contains("android")) {
+                    plugins.add("    alias(libs.plugins.android.application)")
+                }
+                val pluginsBlock = "plugins {\n" + plugins.joinToString("\n") + "\n}"
+
+                // Build kotlin targets block
+                val kotlinTargets = mutableListOf<String>()
+                if (targets.contains("android")) {
+                    kotlinTargets.add(
+                        """    androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }"""
+                    )
+                }
+                if (targets.contains("ios")) {
+                    val baseName = toCamelCase(moduleName)
+                    kotlinTargets.add(
+                        """    listOf(
+        iosArm64(),
+        iosSimulatorArm64()
+    ).forEach { iosTarget ->
+        iosTarget.binaries.framework {
+            baseName = "$baseName"
+            isStatic = true
+        }
+    }"""
+                    )
+                }
+                if (targets.contains("jvm")) {
+                    kotlinTargets.add("    jvm()")
+                }
+                if (targets.contains("web")) {
+                    kotlinTargets.add(
+                        """    js {
+        browser {
+            val rootDirPath = project.rootDir.path
+            val projectDirPath = project.projectDir.path
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+                    static = (static ?: mutableListOf()).apply {
+                        add(rootDirPath)
+                        add(projectDirPath)
+                    }
+                }
+            }
+        }
+        binaries.executable()
+    }"""
+                    )
+                    kotlinTargets.add(
+                        """    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser {
+            val rootDirPath = project.rootDir.path
+            val projectDirPath = project.projectDir.path
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+                    static = (static ?: mutableListOf()).apply {
+                        // Serve sources to debug inside browser
+                        add(rootDirPath)
+                        add(projectDirPath)
+                    }
+                }
+            }
+        }
+        binaries.executable()
+    }"""
+                    )
+                }
+                val kotlinTargetsBlock =
+                    if (kotlinTargets.isNotEmpty()) kotlinTargets.joinToString("\n\n") + "\n" else ""
+
+                // Build sourcesets block
+                val sourcesets = mutableListOf<String>()
+                sourcesets.add(
+                    """    sourceSets {
+        commonMain.dependencies {
+            implementation(compose.components.resources)
+            implementation(compose.components.uiToolingPreview)
+            implementation(compose.material3)
+        }"""
+                )
+
+                if (targets.contains("jvm")) {
+                    sourcesets.add(
+                        """        jvmMain.dependencies {
+            implementation(compose.desktop.currentOs)
+        }"""
+                    )
+                }
+                if (targets.contains("android")) {
+                    sourcesets.add(
+                        """        androidMain.dependencies {
+            implementation(compose.preview)
+            implementation(libs.androidx.activitycompose)
+        }"""
+                    )
+                }
+                sourcesets.add("    }")
+                val sourcesetsBlock = sourcesets.joinToString("\n")
+
+                // Build configuration blocks
+                val configurations = mutableListOf<String>()
+                if (targets.contains("android")) {
+                    configurations.add(
+                        """android {
+    namespace = "{{namespace}}"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+
+    defaultConfig {
+        applicationId = "{{namespace}}"
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        versionCode = 1
+        versionName = "1.0"
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}"""
+                    )
+                }
+                if (targets.contains("jvm")) {
+                    configurations.add(
+                        """compose.desktop {
+    application {
+        mainClass = "{{namespace}}.MainKt"
+
+        nativeDistributions {
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            packageName = "{{namespace}}"
+            packageVersion = "1.0.0"
+        }
+    }
+}"""
+                    )
+                }
+                val configurationBlocksBlock =
+                    if (configurations.isNotEmpty()) configurations.joinToString("\n\n") else ""
+
+                // Replace composeApp build.gradle.kts blocks
+                updatedContent = updatedContent.replace("{{imports}}", importsBlock)
+                updatedContent = updatedContent.replace("{{plugins}}", pluginsBlock)
+                updatedContent = updatedContent.replace("{{kotlin_targets}}", kotlinTargetsBlock)
+                updatedContent = updatedContent.replace("{{sourcesets}}", sourcesetsBlock)
+                updatedContent = updatedContent.replace("{{configuration_blocks}}", configurationBlocksBlock)
+
+                // Replace remaining placeholders after blocks are built
+                updatedContent = updatedContent.replace("{{namespace}}", packageName)
+                updatedContent = updatedContent.replace("{{module_name}}", moduleName)
+                updatedContent = updatedContent.replace("{{app_name}}", appName)
+                updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
+                updatedContent = updatedContent.replace("{{target_name}}", "${toCamelCase(moduleName)}.app")
+                if (content != updatedContent) {
+                    file.writeText(updatedContent.trim() + "\n")
+                }
+            } catch (e: Exception) {
+                // If we can't read as text, skip this file
+                debugln { "Skipping binary file: ${file.name}" }
+            }
+        }
+    }
+
+    // Log module creation summary
     infoln { "" }
-    infoln { "Project Configuration:" }
+    infoln { "Module Configuration:" }
     infoln { "\tApp Name: $appName" }
     infoln { "\tPackage: $packageName" }
-    infoln { "\tCompose Module: $moduleName" }
+    infoln { "\tModule: $moduleName" }
     infoln { "\tTargets: ${targets.joinToString(", ")}" }
     infoln { "" }
 
-    debugln { "Success! Your new Compose app is ready at ${target.absolutePath}" }
-    debugln { "Start by typing:" }
-    infoln { "" }
-    infoln { "\tcd $dirName" }
-    infoln { "\t$gradleScript run" }
-    infoln { "" }
-    debugln { "Happy coding!" }
+    debugln { "Success! Your new Compose Multiplatform module is ready at ${moduleDir.absolutePath}" }
+}
+
+private fun createIosAppDirectory(
+    targetDir: String,
+    moduleName: String
+) {
+    val iosAppName = "ios${toCamelCase(moduleName)}"
+    val targetDir = File(targetDir, iosAppName)
+
+    fun copyResource(resourcePath: String, targetFile: File) {
+        val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+        if (inputStream != null) {
+            targetFile.parentFile?.mkdirs()
+            inputStream.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+    }
+
+    fun listResources(path: String): List<String> {
+        val resources = mutableListOf<String>()
+        val resourceUrl = object {}.javaClass.getResource(path)
+
+        if (resourceUrl != null) {
+            when (resourceUrl.protocol) {
+                "file" -> {
+                    val dir = File(resourceUrl.toURI())
+                    dir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val relativePath = file.relativeTo(dir)
+                            resources.add("$path/${relativePath.path}")
+                        }
+                    }
+                }
+
+                "jar" -> {
+                    val jarPath = resourceUrl.path.substringBefore("!")
+                    val jarFile = JarFile(File(jarPath.substringAfter("file:")))
+                    val entries = jarFile.entries()
+
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                            resources.add("/${entry.name}")
+                        }
+                    }
+                    jarFile.close()
+                }
+            }
+        }
+
+        return resources
+    }
+
+    val resources = listResources("/project/iosApp")
+    resources.forEach { resourcePath ->
+        val targetPath = resourcePath.removePrefix("/project/iosApp/")
+        val targetFile = targetDir.resolve(targetPath)
+        copyResource(resourcePath, targetFile)
+
+        // Replace placeholders in text files
+        if (targetFile.name.endsWith(".swift") || targetFile.name.endsWith(".h") || targetFile.name.endsWith(".m") ||
+            targetFile.name.endsWith(".pbxproj") || targetFile.name.endsWith(".xcconfig")
+        ) {
+            try {
+                val content = targetFile.readText()
+                var updatedContent = content.replace("{{module_name}}", moduleName)
+                updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
+                updatedContent = updatedContent.replace("{{target_name}}", "${toCamelCase(moduleName)}.app")
+                // Use defaults for module addition since we don't have app name/namespace in scope
+                updatedContent = updatedContent.replace("{{app_name}}", "My App")
+                updatedContent = updatedContent.replace("{{namespace}}", "com.example.app")
+                if (content != updatedContent) {
+                    targetFile.writeText(updatedContent)
+                }
+            } catch (e: Exception) {
+                // Skip binary files
+            }
+        }
+    }
 }

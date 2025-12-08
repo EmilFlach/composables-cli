@@ -2,6 +2,7 @@ package com.composables.cli
 
 import com.alexstyl.debugln.debugln
 import com.alexstyl.debugln.infoln
+import com.alexstyl.debugln.warnln
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.main
@@ -11,6 +12,7 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.versionOption
 import java.io.File
 import java.io.InputStream
+import java.util.jar.JarFile
 
 val ANDROID = "android"
 val JVM = "jvm"
@@ -26,11 +28,12 @@ suspend fun main(args: Array<String>) {
 //        targetDir = "/Users/alexstyl/projects/composables-cli",
 //        dirName = "composeApp",
 //        packageName = "com.composables",
+//        moduleName = "app",
 //        appName = "The App",
 //        targets = setOf(
-//            ANDROID,
+////            ANDROID,
 ////            JVM,
-////            IOS,
+//            IOS,
 ////            WEB
 //        )
 //    )
@@ -115,24 +118,25 @@ class Init : CliktCommand("init") {
         val appName = readAppName()
         val namespace = readNamespace()
         val targets = readTargets()
+        val moduleName = readModuleName()
 
         cloneComposeApp(
             targetDir = workingDir,
             dirName = projectName,
             packageName = namespace,
             appName = appName,
-            targets = targets
+            targets = targets,
+            moduleName = moduleName
         )
     }
 
     private fun readNamespace(): String {
         while (true) {
-            print("Enter package name (e.g., com.example.app): ")
+            print("Enter package name (default: com.example.app): ")
             val namespace = readln().trim()
 
             if (namespace.isEmpty()) {
-                echo("Package name cannot be empty")
-                continue
+                return "com.example.app"
             }
 
             if (!isValidPackageName(namespace)) {
@@ -146,12 +150,11 @@ class Init : CliktCommand("init") {
 
     private fun readAppName(): String {
         while (true) {
-            print("Enter app name (e.g., My App): ")
+            print("Enter app name (default: My App): ")
             val appName = readln().trim()
 
             if (appName.isEmpty()) {
-                echo("App name cannot be empty")
-                continue
+                return "My App"
             }
 
             if (!isValidAppName(appName)) {
@@ -170,36 +173,36 @@ class Init : CliktCommand("init") {
             echo("\nWhich platforms would you like your app to run on?")
 
             while (true) {
-                print("Android (y/n): ")
+                print("Android (y/n, default: y): ")
                 val android = readln().trim().lowercase()
-                if (android == "y" || android == "yes") {
+                if (android.isEmpty() || android == "y" || android == "yes") {
                     targets.add(ANDROID)
                 }
                 break
             }
 
             while (true) {
-                print("JVM (Desktop) (y/n): ")
+                print("JVM (Desktop) (y/n, default: y): ")
                 val jvm = readln().trim().lowercase()
-                if (jvm == "y" || jvm == "yes") {
+                if (jvm.isEmpty() || jvm == "y" || jvm == "yes") {
                     targets.add(JVM)
                 }
                 break
             }
 
             while (true) {
-                print("iOS (y/n): ")
+                print("iOS (y/n, default: y): ")
                 val ios = readln().trim().lowercase()
-                if (ios == "y" || ios == "yes") {
+                if (ios.isEmpty() || ios == "y" || ios == "yes") {
                     targets.add(IOS)
                 }
                 break
             }
 
             while (true) {
-                print("Web (y/n): ")
+                print("Web (y/n, default: y): ")
                 val web = readln().trim().lowercase()
-                if (web == "y" || web == "yes") {
+                if (web.isEmpty() || web == "y" || web == "yes") {
                     targets.add(WEB)
                 }
                 break
@@ -220,6 +223,32 @@ class Init : CliktCommand("init") {
         return appName.any { char -> char.isLetterOrDigit() }
     }
 
+    private fun readModuleName(): String {
+        while (true) {
+            print("Enter module name (default: composeApp): ")
+            val moduleName = readln().trim()
+
+            if (moduleName.isEmpty()) {
+                return "composeApp"
+            }
+
+            if (!isValidModuleName(moduleName)) {
+                echo("Invalid module name. Must start with a letter and contain only letters, digits, hyphens, or underscores")
+                continue
+            }
+
+            return moduleName
+        }
+    }
+
+    private fun isValidModuleName(moduleName: String): Boolean {
+        if (moduleName.isEmpty()) return false
+
+        // Check if it contains at least one letter or digit
+        return moduleName.any { char -> char.isLetterOrDigit() } &&
+                moduleName.all { char -> char.isLetterOrDigit() || char == '-' || char == '_' }
+    }
+
     private fun isValidPackageName(packageName: String): Boolean {
         if (packageName.isEmpty()) return false
 
@@ -233,6 +262,18 @@ class Init : CliktCommand("init") {
                     part.all { char -> char.isLetterOrDigit() || char == '_' }
         }
     }
+}
+
+private fun toCamelCase(input: String): String {
+    return input.split(Regex("[-_]"))
+        .mapIndexed { index, part ->
+            if (index == 0) {
+                part.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            } else {
+                part.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            }
+        }
+        .joinToString("")
 }
 
 class Target : CliktCommand("target") {
@@ -276,7 +317,7 @@ class Target : CliktCommand("target") {
                 try {
                     addAndroidTarget(workingDir, composeModuleBuildFile)
                     echo("Android target added successfully!")
-                    echo("Run './gradlew build' to verify the configuration.")
+                    echo("Run '$gradleScript build' to verify the configuration.")
                 } catch (e: Exception) {
                     echo("Failed to add Android target: ${e.message}", err = true)
                 }
@@ -290,7 +331,7 @@ class Target : CliktCommand("target") {
                 try {
                     addJvmTarget(workingDir, composeModuleBuildFile)
                     echo("JVM target added successfully!")
-                    echo("Run './gradlew build' to verify the configuration.")
+                    echo("Run '$gradleScript build' to verify the configuration.")
                 } catch (e: Exception) {
                     echo("Failed to add JVM target: ${e.message}", err = true)
                 }
@@ -304,7 +345,7 @@ class Target : CliktCommand("target") {
                 try {
                     addIosTarget(workingDir, composeModuleBuildFile)
                     echo("iOS target added successfully!")
-                    echo("Run './gradlew build' to verify the configuration.")
+                    echo("Run '$gradleScript build' to verify the configuration.")
                 } catch (e: Exception) {
                     echo("Failed to add iOS target: ${e.message}", err = true)
                 }
@@ -318,7 +359,7 @@ class Target : CliktCommand("target") {
                 try {
                     addWebTarget(workingDir, composeModuleBuildFile)
                     echo("Web target added successfully!")
-                    echo("Run './gradlew build' to verify the configuration.")
+                    echo("Run '$gradleScript build' to verify the configuration.")
                 } catch (e: Exception) {
                     echo("Failed to add web target: ${e.message}", err = true)
                 }
@@ -388,11 +429,11 @@ class Target : CliktCommand("target") {
         sortedModules.forEachIndexed { index, module ->
             echo("  ${index + 1}. ${module.name}")
         }
-        
+
         while (true) {
             print("Select a module (1-${sortedModules.size}): ")
             val input = readln().trim()
-            
+
             val selection = input.toIntOrNull()
             if (selection != null && selection in 1..sortedModules.size) {
                 val selectedModule = sortedModules[selection - 1]
@@ -483,7 +524,7 @@ class Target : CliktCommand("target") {
         }
 
         // Add android block at the end
-        val namespace = extractNamespace(lines)
+        val namespace = "com.example.app" // Default namespace for target command
         val androidBlock = listOf(
             "",
             "android {",
@@ -521,6 +562,9 @@ class Target : CliktCommand("target") {
         // Create androidMain source set and MainActivity
         val moduleDir = buildFile.parentFile
         createAndroidSourceSet(moduleDir, namespace)
+
+        // Copy Android resources
+        copyAndroidResources(moduleDir, namespace)
 
         // Update root build.gradle.kts
         updateRootBuildFile(workingDir)
@@ -681,9 +725,20 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 
 class MainActivity : ComponentActivity() {
@@ -698,7 +753,31 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AndroidApp() {
     MaterialTheme {
-        Text("Hello beautiful world")
+        Scaffold {
+            Box(
+                modifier = Modifier
+                    .safeDrawingPadding()
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                ) {
+                    Text(
+                        text = "Hello Beautiful World!",
+                        style = MaterialTheme.typography.displayLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Go to MainActivity.kt to edit your app",
+                        style = MaterialTheme.typography.displayMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -709,6 +788,95 @@ fun DefaultPreview() {
 }
 """
         mainActivityFile.writeText(mainActivityContent)
+    }
+
+    private fun copyAndroidResources(moduleDir: File, namespace: String) {
+        fun copyResource(resourcePath: String, targetFile: File) {
+            val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
+            if (inputStream != null) {
+                targetFile.parentFile?.mkdirs()
+                inputStream.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+
+        fun listResources(path: String): List<String> {
+            val resources = mutableListOf<String>()
+            val resourceUrl = object {}.javaClass.getResource(path)
+
+            if (resourceUrl != null) {
+                when (resourceUrl.protocol) {
+                    "file" -> {
+                        val dir = File(resourceUrl.toURI())
+                        dir.walkTopDown().forEach { file ->
+                            if (file.isFile) {
+                                val relativePath = file.relativeTo(dir)
+                                resources.add("$path/${relativePath.path}")
+                            }
+                        }
+                    }
+
+                    "jar" -> {
+                        val jarPath = resourceUrl.path.substringBefore("!")
+                        val jarFile = JarFile(File(jarPath.substringAfter("file:")))
+                        val entries = jarFile.entries()
+
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (entry.name.startsWith(path.substring(1)) && !entry.isDirectory) {
+                                resources.add("/${entry.name}")
+                            }
+                        }
+                        jarFile.close()
+                    }
+                }
+            }
+
+            return resources
+        }
+
+        val resources = listResources("/project/composeApp/src/androidMain")
+        resources.forEach { resourcePath ->
+            val targetPath = resourcePath.removePrefix("/project/composeApp/src/androidMain/")
+
+            // Skip MainActivity.kt template since we create it programmatically
+            if (targetPath.endsWith("MainActivity.kt")) {
+                return@forEach
+            }
+
+            val targetFile = File(moduleDir, "src/androidMain/$targetPath")
+            copyResource(resourcePath, targetFile)
+
+            // Replace placeholders in text files
+            if (targetFile.name.endsWith(".kt")) {
+                try {
+                    val content = targetFile.readText()
+                    var updatedContent = content.replace("{{namespace}}", namespace)
+                    updatedContent = updatedContent.replace("{{app_name}}", "My App")
+                    if (content != updatedContent) {
+                        targetFile.writeText(updatedContent)
+                    }
+                } catch (e: Exception) {
+                    // Skip binary files
+                }
+            }
+
+            // Replace placeholders in strings.xml
+            if (targetFile.name == "strings.xml") {
+                try {
+                    val content = targetFile.readText()
+                    var updatedContent = content.replace("{{app_name}}", "My App")
+                    if (content != updatedContent) {
+                        targetFile.writeText(updatedContent)
+                    }
+                } catch (e: Exception) {
+                    // Skip binary files
+                }
+            }
+        }
     }
 
     private fun addJvmTarget(workingDir: String, buildFile: File) {
@@ -858,6 +1026,8 @@ fun DesktopAppPreview() {
         // Append to kotlin block
         val kotlinCloseIndex = findKotlinBlockEnd(lines)
         if (kotlinCloseIndex >= 0) {
+            val moduleName = buildFile.parentFile.name
+            val baseName = toCamelCase(moduleName)
             val iosTargetLines = listOf(
                 "",
                 "    listOf(",
@@ -865,7 +1035,7 @@ fun DesktopAppPreview() {
                 "        iosSimulatorArm64()",
                 "    ).forEach { iosTarget ->",
                 "        iosTarget.binaries.framework {",
-                "            baseName = \"ComposeApp\"",
+                "            baseName = \"$baseName\"",
                 "            isStatic = true",
                 "        }",
                 "    }"
@@ -897,7 +1067,24 @@ fun DesktopAppPreview() {
         createIosSourceSet(moduleDir, extractNamespace(lines))
 
         // Copy iOS app directory
-        copyIosAppDirectory(workingDir) // iOS app is still at root level
+        copyIosAppDirectory(workingDir, moduleDir.name) // iOS app is still at root level
+
+        // Link iOS project for IDE
+        try {
+            debugln { "Preparing iOS target..." }
+            val process = ProcessBuilder(gradleScript, "compileIosMainKotlinMetadata", "--quiet")
+                .directory(File(workingDir))
+                .inheritIO()
+                .start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                echo("iOS target is now ready to run from the IDE")
+            } else {
+                echo("Warning: Failed to link iOS project for IDE. You may need to run '$gradleScript compileIosMainKotlinMetadata' manually.")
+            }
+        } catch (e: Exception) {
+            echo("Warning: Failed to link iOS project for IDE: ${e.message}")
+        }
     }
 
     private fun createIosSourceSet(moduleDir: File, namespace: String) {
@@ -1005,7 +1192,19 @@ fun IosAppPreview() {
             val webTargetLines = listOf(
                 "",
                 "    js {",
-                "        browser()",
+                "        browser {",
+                "            val rootDirPath = project.rootDir.path",
+                "            val projectDirPath = project.projectDir.path",
+                "            commonWebpackConfig {",
+                "                outputFileName = \"composeApp.js\"",
+                "                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {",
+                "                    static = (static ?: mutableListOf()).apply {",
+                "                        add(rootDirPath)",
+                "                        add(projectDirPath)",
+                "                    }",
+                "                }",
+                "            }",
+                "        }",
                 "        binaries.executable()",
                 "    }",
                 "",
@@ -1165,7 +1364,7 @@ fun WebAppPreview() {
 
                     "jar" -> {
                         val jarPath = resourceUrl.path.substringBefore("!")
-                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val jarFile = JarFile(File(jarPath.substringAfter("file:")))
                         val entries = jarFile.entries()
 
                         while (entries.hasMoreElements()) {
@@ -1223,7 +1422,7 @@ fun WebAppPreview() {
 
                     "jar" -> {
                         val jarPath = resourceUrl.path.substringBefore("!")
-                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val jarFile = JarFile(File(jarPath.substringAfter("file:")))
                         val entries = jarFile.entries()
 
                         while (entries.hasMoreElements()) {
@@ -1261,8 +1460,9 @@ fun WebAppPreview() {
         }
     }
 
-    private fun copyIosAppDirectory(workingDir: String) {
-        val targetDir = File(workingDir, "iosApp") // iOS app is always at root
+    private fun copyIosAppDirectory(workingDir: String, moduleName: String) {
+        val iosAppName = "ios${toCamelCase(moduleName)}" // Dynamic iOS app name based on module
+        val targetDir = File(workingDir, iosAppName) // iOS app directory name based on module
 
         fun copyResource(resourcePath: String, targetFile: File) {
             val inputStream: InputStream? = object {}.javaClass.getResourceAsStream(resourcePath)
@@ -1294,7 +1494,7 @@ fun WebAppPreview() {
 
                     "jar" -> {
                         val jarPath = resourceUrl.path.substringBefore("!")
-                        val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                        val jarFile = JarFile(File(jarPath.substringAfter("file:")))
                         val entries = jarFile.entries()
 
                         while (entries.hasMoreElements()) {
@@ -1316,16 +1516,45 @@ fun WebAppPreview() {
             val targetPath = resourcePath.removePrefix("/project/iosApp/")
             val targetFile = targetDir.resolve(targetPath)
             copyResource(resourcePath, targetFile)
+
+            // Replace placeholders in text files
+            if (targetFile.name.endsWith(".swift") || targetFile.name.endsWith(".h") || targetFile.name.endsWith(".m") || targetFile.name.endsWith(
+                    ".pbxproj"
+                ) || targetFile.name.endsWith(".xcconfig")
+            ) {
+                try {
+                    val content = targetFile.readText()
+                    var updatedContent = content.replace("{{module_name}}", moduleName)
+                    updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
+                    // For target command, use hardcoded defaults since appName/namespace aren't in scope
+                    updatedContent = updatedContent.replace("{{app_name}}", "My App")
+                    updatedContent = updatedContent.replace("{{namespace}}", "com.example.app")
+                    if (content != updatedContent) {
+                        targetFile.writeText(updatedContent)
+                    }
+                } catch (e: Exception) {
+                    // Skip binary files
+                }
+            }
         }
     }
 }
+
+val gradleScript: String
+    get() {
+        return if (System.getProperty("os.name").lowercase().contains("win"))
+            "gradlew.bat"
+        else
+            "./gradlew"
+    }
 
 fun cloneComposeApp(
     targetDir: String,
     dirName: String,
     packageName: String,
     appName: String,
-    targets: Set<String>
+    targets: Set<String>,
+    moduleName: String
 ) {
     val target = File(targetDir).resolve(dirName)
 
@@ -1352,6 +1581,7 @@ fun cloneComposeApp(
                 actualTargetFile.setExecutable(true)
             }
         } else {
+            error("Resource not found: $resourcePath")
             debugln { "Resource not found: $resourcePath" }
         }
     }
@@ -1376,7 +1606,7 @@ fun cloneComposeApp(
                 "jar" -> {
                     // Production mode - read from JAR
                     val jarPath = resourceUrl.path.substringBefore("!")
-                    val jarFile = java.util.jar.JarFile(File(jarPath.substringAfter("file:")))
+                    val jarFile = JarFile(File(jarPath.substringAfter("file:")))
                     val entries = jarFile.entries()
 
                     while (entries.hasMoreElements()) {
@@ -1403,7 +1633,8 @@ fun cloneComposeApp(
         }
 
         // Skip source set directories if corresponding target is not selected
-        if (targetPath.startsWith("composeApp/src/")) {
+        val isInsideAKotlinSourceSet = targetPath.startsWith("composeApp/src/")
+        if (isInsideAKotlinSourceSet) {
             val sourceSetType = targetPath.substringAfter("composeApp/src/").substringBefore("/")
             when (sourceSetType) {
                 "androidMain" -> if (!targets.contains("android")) return@forEach
@@ -1412,16 +1643,21 @@ fun cloneComposeApp(
                 "jsMain" -> if (!targets.contains("web")) return@forEach
                 "wasmJsMain" -> if (!targets.contains("web")) return@forEach
                 "webMain" -> if (!targets.contains("web")) return@forEach
+                "commonMain" -> Unit
+                else -> error("Unknown target: $targetPath")
             }
         }
 
         // Skip webpack.config.d directory if web target is not selected
-        if (!targets.contains("web") && targetPath.startsWith("composeApp/webpack.config.d/")) {
+        if (!targets.contains("web") && targetPath.startsWith("$moduleName/webpack.config.d/")) {
             return@forEach
         }
 
         // Replace org.example.project with the actual namespace in file paths
         targetPath = targetPath.replace("org/example/project", packageName.replace(".", "/"))
+
+        // Replace composeApp with the actual module name in file paths
+        targetPath = targetPath.replace("composeApp", moduleName)
 
         val targetFile = target.resolve(targetPath)
         copyResource(resourcePath, targetFile)
@@ -1509,13 +1745,14 @@ android.useAndroidX=true
                     )
                 }
                 if (targets.contains("ios")) {
+                    val baseName = toCamelCase(moduleName)
                     kotlinTargets.add(
                         """    listOf(
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
-            baseName = "ComposeApp"
+            baseName = "$baseName"
             isStatic = true
         }
     }"""
@@ -1527,7 +1764,19 @@ android.useAndroidX=true
                 if (targets.contains("web")) {
                     kotlinTargets.add(
                         """    js {
-        browser()
+        browser {
+            val rootDirPath = project.rootDir.path
+            val projectDirPath = project.projectDir.path
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+                    static = (static ?: mutableListOf()).apply {
+                        add(rootDirPath)
+                        add(projectDirPath)
+                    }
+                }
+            }
+        }
         binaries.executable()
     }"""
                     )
@@ -1695,6 +1944,9 @@ android.useAndroidX=true
 
                 // Replace remaining placeholders after blocks are built
                 updatedContent = updatedContent.replace("{{namespace}}", packageName)
+                updatedContent = updatedContent.replace("{{module_name}}", moduleName)
+                updatedContent = updatedContent.replace("{{app_name}}", appName)
+                updatedContent = updatedContent.replace("{{ios_binary_name}}", toCamelCase(moduleName))
                 if (content != updatedContent) {
                     file.writeText(updatedContent.trim() + "\n")
                 }
@@ -1705,11 +1957,39 @@ android.useAndroidX=true
         }
     }
 
+    // Link iOS project for IDE if iOS target was included
+    if (targets.contains("ios")) {
+        try {
+            debugln { "Preparing iOS target..." }
+            val process = ProcessBuilder(gradleScript, "compileIosMainKotlinMetadata", "--quiet")
+                .directory(target)
+                .inheritIO()
+                .start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                debugln { "iOS target is now ready to run from the IDE" }
+            } else {
+                warnln { "Warning: Failed to link iOS project for IDE. You may need to run '$gradleScript compileIosMainKotlinMetadata' manually." }
+            }
+        } catch (e: Exception) {
+            warnln { "Warning: Failed to link iOS project for IDE: ${e.message}" }
+        }
+    }
+
+    // Log project configuration summary
+    infoln { "" }
+    infoln { "Project Configuration:" }
+    infoln { "\tApp Name: $appName" }
+    infoln { "\tPackage: $packageName" }
+    infoln { "\tCompose Module: $moduleName" }
+    infoln { "\tTargets: ${targets.joinToString(", ")}" }
+    infoln { "" }
+
     debugln { "Success! Your new Compose app is ready at ${target.absolutePath}" }
     debugln { "Start by typing:" }
     infoln { "" }
     infoln { "\tcd $dirName" }
-    infoln { "\t./gradlew run" }
+    infoln { "\t$gradleScript run" }
     infoln { "" }
     debugln { "Happy coding!" }
 }

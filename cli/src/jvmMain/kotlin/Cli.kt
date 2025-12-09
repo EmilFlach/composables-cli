@@ -80,7 +80,7 @@ class Init : CliktCommand("init") {
             infoln { "composables init <project-directory>" }
             debugln { "" }
             debugln { "For example:" }
-            infoln { "composables init composeApp" }
+            infoln { "composables init app" }
             return
         }
         val target = if (projectName == ".") File(workingDir) else File(workingDir).resolve(projectName)
@@ -361,7 +361,7 @@ class Target : CliktCommand("target") {
         if (!isValidComposeAppDirectory(workingDir)) {
             echo("This doesn't appear to be a Compose Multiplatform project.")
             echo("To create a new Compose app, run:")
-            echo("    composables init composeApp")
+            echo("    composables init app")
             return
         }
 

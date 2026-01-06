@@ -2132,23 +2132,23 @@ android.useAndroidX=true
     }
 
     // Link iOS project for IDE if iOS target was included
-    if (targets.contains("ios")) {
-        try {
-            debugln { "Preparing iOS target..." }
-            val process = ProcessBuilder(gradleScript, "compileIosMainKotlinMetadata", "--quiet")
-                .directory(target)
-                .inheritIO()
-                .start()
-            val exitCode = process.waitFor()
-            if (exitCode == 0) {
-                debugln { "iOS target is now ready to run from the IDE" }
-            } else {
-                warnln { "Warning: Failed to link iOS project for IDE. You may need to run '$gradleScript compileIosMainKotlinMetadata' manually." }
-            }
-        } catch (e: Exception) {
-            warnln { "Warning: Failed to link iOS project for IDE: ${e.message}" }
-        }
-    }
+//    if (targets.contains("ios")) {
+//        try {
+//            debugln { "Preparing iOS target..." }
+//            val process = ProcessBuilder(gradleScript, "compileIosMainKotlinMetadata", "--quiet")
+//                .directory(target)
+//                .inheritIO()
+//                .start()
+//            val exitCode = process.waitFor()
+//            if (exitCode == 0) {
+//                debugln { "iOS target is now ready to run from the IDE" }
+//            } else {
+//                warnln { "Warning: Failed to link iOS project for IDE. You may need to run '$gradleScript compileIosMainKotlinMetadata' manually." }
+//            }
+//        } catch (e: Exception) {
+//            warnln { "Warning: Failed to link iOS project for IDE: ${e.message}" }
+//        }
+//    }
 
 }
 

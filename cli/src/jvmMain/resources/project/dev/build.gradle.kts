@@ -1,4 +1,4 @@
-package project.dev.src.mainplugins {
+plugins {
     kotlin("jvm")
     application
 }

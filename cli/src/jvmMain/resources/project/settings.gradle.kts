@@ -34,3 +34,4 @@ plugins {
 }
 
 include(":{{module_name}}")
+include(":dev")

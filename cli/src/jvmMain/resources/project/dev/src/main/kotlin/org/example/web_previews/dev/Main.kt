@@ -1,4 +1,5 @@
 package org.example.web_previews.dev
+
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import io.ktor.http.*
@@ -15,104 +16,123 @@ import kotlinx.coroutines.channels.Channel
 import java.io.File
 import java.net.NetworkInterface
 import java.nio.file.*
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 
 fun main() {
     println("=".repeat(50))
     println("Starting development server...")
 
-    val port = 8080
-    val localIp = getLocalIpAddress()
-    val localUrl = "http://localhost:$port"
-    val networkUrl = localIp?.let { "http://$it:$port" }
+    var currentPort = 8080
+    var serverStarted = false
 
-    val buildInProgress = AtomicBoolean(false)
-    val clients = java.util.Collections.synchronizedSet(mutableSetOf<DefaultWebSocketServerSession>())
+    while (!serverStarted && currentPort < 8100) {
+        try {
+            val localIp = getLocalIpAddress()
+            val localUrl = "http://localhost:$currentPort"
+            val networkUrl = localIp?.let { "http://$it:$currentPort" }
 
-    val distDir = File("composeApp/build/dist/wasmJs/developmentExecutable").let {
-        if (it.exists()) it else File("../composeApp/build/dist/wasmJs/developmentExecutable")
-    }.canonicalFile
+            val buildInProgress = AtomicBoolean(false)
+            val clients = Collections.synchronizedSet(mutableSetOf<DefaultWebSocketServerSession>())
 
-    if (!distDir.exists()) {
-        distDir.mkdirs()
-    }
+            val distDir = File("composeApp/build/dist/wasmJs/developmentExecutable").let {
+                if (it.exists()) it else File("../composeApp/build/dist/wasmJs/developmentExecutable")
+            }.canonicalFile
 
-    // Initial build procedure
-    runBlocking {
-        performRebuild(distDir, clients, buildInProgress, isInitial = true)
-    }
-
-    // Clear the terminal screen to remove Gradle startup noise (if supported by terminal)
-    // \u001b[H moves cursor to home, \u001b[2J clears the screen
-    print("\u001b[H\u001b[2J")
-    System.out.flush()
-
-    println("=".repeat(50))
-    println("Server started!")
-    println("Local:   $localUrl")
-    networkUrl?.let {
-        println("Network: $it")
-        println("\nScan the QR code below for network access:")
-        println(generateQrCodeAscii(it))
-    }
-    println("=".repeat(50))
-
-    embeddedServer(Netty, port = port) {
-        install(WebSockets)
-        install(Compression) {
-            gzip {
-                priority = 1.0
+            if (!distDir.exists()) {
+                distDir.mkdirs()
             }
-            deflate {
-                priority = 10.0
-                minimumSize(1024)
-            }
-        }
 
-        routing {
-            webSocket("/dev-server") {
-                clients.add(this)
-                try {
-                    if (buildInProgress.get()) {
-                        send("rebuilding")
+            // Initial build procedure
+            runBlocking {
+                performRebuild(distDir, clients, buildInProgress, isInitial = true)
+            }
+
+            // Clear the terminal screen to remove Gradle startup noise (if supported by terminal)
+            // \u001b[H moves cursor to home, \u001b[2J clears the screen
+            print("\u001b[H\u001b[2J")
+            System.out.flush()
+
+            println("=".repeat(50))
+            println("Server started on port $currentPort!")
+            networkUrl?.let {
+                println("\nScan the QR code below to view on your phone:")
+                println(generateQrCodeAscii(it))
+                println("Local:   $localUrl")
+                println("Network: $it")
+            }
+            println("")
+            println("")
+            println("Use Android Studio and the KMP Plugin for faster reloads and actual native performance!")
+            println("")
+            println("=".repeat(50))
+
+            embeddedServer(Netty, port = currentPort) {
+                install(WebSockets)
+                install(Compression) {
+                    gzip {
+                        priority = 1.0
                     }
-                    for (frame in incoming) {
-                        // Keep alive
+                    deflate {
+                        priority = 10.0
+                        minimumSize(1024)
                     }
-                } finally {
-                    clients.remove(this)
                 }
-            }
 
-            staticFiles("/", distDir) {
-                enableAutoHeadResponse()
-                default("index.html")
-                // Add headers to encourage browser to use the background-fetched files
-                cacheControl {
-                    // Use a short max-age for the transition
-                    listOf(CacheControl.MaxAge(maxAgeSeconds = 10))
+                routing {
+                    webSocket("/dev-server") {
+                        clients.add(this)
+                        try {
+                            if (buildInProgress.get()) {
+                                send("rebuilding")
+                            }
+                            for (frame in incoming) {
+                                // Keep alive
+                            }
+                        } finally {
+                            clients.remove(this)
+                        }
+                    }
+
+                    staticFiles("/", distDir) {
+                        enableAutoHeadResponse()
+                        default("index.html")
+                        // Add headers to encourage browser to use the background-fetched files
+                        cacheControl {
+                            // Use a short max-age for the transition
+                            listOf(CacheControl.MaxAge(maxAgeSeconds = 10))
+                        }
+                    }
                 }
+
+                launch(Dispatchers.IO) {
+                    val changeChannel = Channel<Unit>(Channel.CONFLATED)
+
+                    launch {
+                        for (change in changeChannel) {
+                            delay(500) // Debounce
+                            // Consume all pending signals that might have accumulated during delay
+                            while (changeChannel.tryReceive().isSuccess) { /* keep skipping */ }
+
+                            performRebuild(distDir, clients, buildInProgress, isInitial = false)
+                        }
+                    }
+
+                    watchFiles {
+                        changeChannel.send(Unit)
+                    }
+                }
+            }.start(wait = true)
+            serverStarted = true
+        } catch (e: Exception) {
+            if (e.cause is java.net.BindException || e is java.net.BindException) {
+                println("Port $currentPort is already in use, trying next port...")
+                currentPort++
+            } else {
+                throw e
             }
         }
-
-        launch(Dispatchers.IO) {
-            val changeChannel = Channel<Unit>(Channel.CONFLATED)
-
-            launch {
-                for (change in changeChannel) {
-                    delay(500) // Debounce
-                    // Consume all pending signals that might have accumulated during delay
-                    while (changeChannel.tryReceive().isSuccess) { /* keep skipping */ }
-
-                    performRebuild(distDir, clients, buildInProgress, isInitial = false)
-                }
-            }
-
-            watchFiles {
-                changeChannel.send(Unit)
-            }
-        }
-    }.start(wait = true)
+    }
 }
 
 suspend fun performRebuild(
@@ -123,11 +143,11 @@ suspend fun performRebuild(
 ) {
     if (buildInProgress.compareAndSet(false, true)) {
         val startTime = System.currentTimeMillis()
-        var timerJob: kotlinx.coroutines.Job? = null
+        var timerJob: Job?
 
         val statusText = if (isInitial) "Building..." else "Rebuilding..."
 
-        kotlinx.coroutines.coroutineScope {
+        coroutineScope {
             timerJob = launch {
                 while (true) {
                     val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
@@ -168,7 +188,7 @@ suspend fun performRebuild(
                 process.waitFor()
             }
 
-            timerJob?.cancel()
+            timerJob.cancel()
             val duration = (System.currentTimeMillis() - startTime) / 1000.0
             buildInProgress.set(false)
 
@@ -295,4 +315,3 @@ fun generateQrCodeAscii(text: String): String {
     }
     return sb.toString()
 }
-

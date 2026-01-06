@@ -25,7 +25,7 @@ suspend fun main(args: Array<String>) {
         .main(args)
 }
 
-class ComposablesCli : CliktCommand(name = "composables") {
+class ComposablesCli : CliktCommand(name = "instant-compose") {
     init {
         versionOption(
             version = BuildConfig.Version,
@@ -39,7 +39,7 @@ class ComposablesCli : CliktCommand(name = "composables") {
 
     override fun help(context: Context) = """
         If you have any problems or need help, do not hesitate to ask for help at:
-            https://github.com/composablehorizons/composables-cli
+            https://github.com/EmilFlach/instant-compose
     """.trimIndent()
 }
 
@@ -51,20 +51,20 @@ class Update : CliktCommand("update") {
 
     override fun run() {
         try {
-            echo("Updating Composables CLI...")
+            echo("Updating Instant Compose...")
 
             // Get current JAR path
             val currentJarPath = this::class.java.protectionDomain.codeSource.location.path
             val installDir = File(currentJarPath).parent
 
             // Download to temporary location first
-            val tempJar = File(installDir, "composables.jar.tmp")
+            val tempJar = File(installDir, "instant-compose.jar.tmp")
 
             echo("Fetching latest version...")
             val latestVersion = ProcessBuilder(
                 "bash",
                 "-c",
-                "curl -s https://api.github.com/repos/composablehorizons/composables-cli/releases/latest | grep '\"tag_name\":' | sed -E 's/.*\"([^\"]+)\".*/\\1/'"
+                "curl -s https://api.github.com/repos/EmilFlach/instant-compose/releases/latest | grep '\"tag_name\":' | sed -E 's/.*\"([^\"]+)\".*/\\1/'"
             )
                 .redirectErrorStream(true)
                 .start()
@@ -82,7 +82,7 @@ class Update : CliktCommand("update") {
 
             val downloadProcess = ProcessBuilder(
                 "curl", "-fSL",
-                "https://github.com/composablehorizons/composables-cli/releases/download/$latestVersion/composables.jar",
+                "https://github.com/EmilFlach/instant-compose/releases/download/$latestVersion/instant-compose.jar",
                 "-o", tempJar.absolutePath
             ).inheritIO().start()
 
@@ -132,10 +132,10 @@ class Init : CliktCommand("init") {
         val projectName = directory.orEmpty()
         if (projectName.isBlank()) {
             debugln { "Please specify the project directory:" }
-            infoln { "composables init <project-directory>" }
+            infoln { "instant-compose init <project-directory>" }
             debugln { "" }
             debugln { "For example:" }
-            infoln { "composables init app" }
+            infoln { "instant-compose init app" }
             return
         }
         val target = if (projectName == ".") File(workingDir) else File(workingDir).resolve(projectName)
@@ -415,7 +415,7 @@ class Target : CliktCommand("target") {
         if (targetName !in validTargets) {
             echo("Unknown target '$targetName'")
             echo("Available targets: android, jvm, ios, web")
-            echo("Usage: composables target <target-name>")
+            echo("Usage: instant-compose target <target-name>")
             return
         }
 
@@ -424,7 +424,7 @@ class Target : CliktCommand("target") {
         if (!isValidComposeAppDirectory(workingDir)) {
             echo("This doesn't appear to be a Compose Multiplatform project.")
             echo("To create a new Compose app, run:")
-            echo("    composables init app")
+            echo("    instant-compose init app")
             return
         }
 

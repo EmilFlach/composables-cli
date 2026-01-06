@@ -10,7 +10,7 @@ plugins {
     id("com.github.gmazzo.buildconfig") version "6.0.6"
 }
 val mainClassName = "com.composables.cli.CliKt"
-val cliName = "composables"
+val cliName = "instant-compose"
 
 group = "com.composables"
 version = libs.versions.composables.cli.get()
@@ -19,9 +19,9 @@ buildConfig {
     buildConfigField("Version", libs.versions.composables.cli.get())
 }
 
-val organization = "composablehorizons"
+val organization = "EmilFlach"
 
-val projectName = "composables-cli"
+val projectName = "instant-compose"
 val githubUrl = "github.com/$organization/$projectName"
 
 java {

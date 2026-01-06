@@ -5,7 +5,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 
 class CliTest {
-    val targetDir = "/Users/alexstyl/projects/composables-cli/temp"
+    val targetDir = "temp"
 
     @BeforeTest
     fun cleanTargetDirectory() {
@@ -20,7 +20,7 @@ class CliTest {
         cloneGradleProject(
             targetDir = targetDir,
             dirName = "newApp",
-            packageName = "com.composables",
+            packageName = "com.instantcompose",
             moduleName = "composeApp",
             appName = "The App",
             targets = setOf(

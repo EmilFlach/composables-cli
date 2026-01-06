@@ -3,10 +3,10 @@
 set -e
 
 # Configuration
-REPO="EmilFlach/composables-cli"
-INSTALL_DIR="$HOME/.composables/bin"
-JAR_NAME="composables.jar"
-WRAPPER_NAME="composables"
+REPO="EmilFlach/instant-compose"
+INSTALL_DIR="$HOME/.instant-compose/bin"
+JAR_NAME="instant-compose.jar"
+WRAPPER_NAME="instant-compose"
 
 # Colors
 RED='\033[0;31m'  # Standard red for errors
@@ -97,7 +97,7 @@ setup_java() {
     exit 1
 }
 
-echo "Installing Composables CLI..."
+echo "Installing Instant Compose..."
 
 # Check for required commands
 if ! command -v curl &> /dev/null; then
@@ -144,8 +144,8 @@ echo "✓ Downloaded $JAR_NAME"
 echo "Creating wrapper script..."
 cat > "$INSTALL_DIR/$WRAPPER_NAME" << EOF
 #!/bin/bash
-# Composables CLI wrapper
-exec java -jar "\$HOME/.composables/bin/$JAR_NAME" "\$@"
+# Instant Compose CLI wrapper
+exec java -jar "\$HOME/.instant-compose/bin/$JAR_NAME" "\$@"
 EOF
 
 chmod +x "$INSTALL_DIR/$WRAPPER_NAME"
@@ -173,21 +173,21 @@ esac
 
 # Add to PATH if shell config file exists
 if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
-    if ! grep -q ".composables/bin" "$SHELL_RC"; then
+    if ! grep -q ".instant-compose/bin" "$SHELL_RC"; then
         echo "" >> "$SHELL_RC"
-        echo "# Composables CLI" >> "$SHELL_RC"
-        echo "export PATH=\"\$HOME/.composables/bin:\$PATH\"" >> "$SHELL_RC"
-        echo "Added Composables CLI to PATH in $SHELL_RC"
+        echo "# Instant Compose" >> "$SHELL_RC"
+        echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
+        echo "Added Instant Compose to PATH in $SHELL_RC"
     else
-        echo "Composables CLI already in PATH"
+        echo "Instant Compose already in PATH"
     fi
 elif [ -n "$SHELL_RC" ]; then
         echo "Shell config file $SHELL_RC not found. Creating it..."
     touch "$SHELL_RC"
     echo "" >> "$SHELL_RC"
-    echo "# Composables CLI" >> "$SHELL_RC"
-    echo "export PATH=\"\$HOME/.composables/bin:\$PATH\"" >> "$SHELL_RC"
-    echo "Created $SHELL_RC and added Composables CLI to PATH"
+    echo "# Instant Compose" >> "$SHELL_RC"
+    echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
+    echo "Created $SHELL_RC and added Instant Compose to PATH"
 fi
 
 # Make it immediately available for current session
@@ -195,14 +195,14 @@ export PATH="$INSTALL_DIR:$PATH"
 
 # Test installation
 echo -e "${BLUE}Testing installation...${NC}"
-if command -v composables &> /dev/null; then
-    echo "✓ Composables CLI installed successfully!"
+if command -v instant-compose &> /dev/null; then
+    echo "✓ Instant Compose installed successfully!"
     echo ""
     echo "Usage:"
-    echo "  composables --help               - Show all available commands"
+    echo "  instant-compose --help               - Show all available commands"
     echo ""
     if [ -n "$SHELL_RC" ]; then
-        echo "Note: Restart your terminal or run 'source $SHELL_RC' to use composables from anywhere"
+        echo "Note: Restart your terminal or run 'source $SHELL_RC' to use instant-compose from anywhere"
     fi
 else
     echo -e "${RED}Error: Installation verification failed${NC}"

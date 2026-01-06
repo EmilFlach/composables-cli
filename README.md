@@ -9,13 +9,13 @@ Start building your Compose app within a minute using any editor.
 ### 1. Install the CLI
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/EmilFlach/composables-cli/refs/heads/main/get-composables.sh | bash
+curl -fsSL https://raw.githubusercontent.com/EmilFlach/instant-compose/refs/heads/main/get-instant-compose.sh | bash
 ```
 
 ### 2. Create your app
 
 ```shell
-composables init myApp
+instant-compose init myApp
 cd myApp
 ./gradlew :dev:run
 ```

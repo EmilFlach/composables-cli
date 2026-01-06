@@ -1704,7 +1704,7 @@ fun cloneGradleProjectAndPrint(
     debugln { "Start by typing:" }
     infoln { "" }
     infoln { "\tcd $dirName" }
-    infoln { "\t$gradleScript run" }
+    infoln { "\t$gradleScript :dev:run" }
     infoln { "" }
     debugln { "Happy coding!" }
 }

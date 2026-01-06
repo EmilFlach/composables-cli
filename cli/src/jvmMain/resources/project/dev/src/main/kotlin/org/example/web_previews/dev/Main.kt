@@ -60,7 +60,18 @@ fun main() {
         val distDir = File("composeApp/build/dist/wasmJs/developmentExecutable").let {
             if (it.exists()) it else File("../composeApp/build/dist/wasmJs/developmentExecutable")
         }.canonicalFile
-        
+
+        if (!distDir.exists()) {
+            distDir.mkdirs()
+        }
+
+        // Copy resources initially if they exist
+        val initialResourcesDir = File("composeApp/src/webMain/resources")
+        if (initialResourcesDir.exists()) {
+            initialResourcesDir.listFiles()?.forEach { file ->
+                file.copyTo(File(distDir, file.name), overwrite = true)
+            }
+        }
         routing {
             webSocket("/dev-server") {
                 clients.add(this)
@@ -137,6 +148,13 @@ fun main() {
                     if (exitCode == 0) {
                         print("\r\u001B[32mRebuild successful in ${"%.1f".format(duration)}s, notifying clients.\u001B[0m          ")
                         System.out.flush()
+
+                        val resourcesDir = File("composeApp/src/webMain/resources")
+                        if (resourcesDir.exists()) {
+                            resourcesDir.listFiles()?.forEach { file ->
+                                file.copyTo(File(distDir, file.name), overwrite = true)
+                            }
+                        }
                         val filesList = distDir.listFiles()?.filter { 
                             it.name.endsWith(".js") || it.name.endsWith(".wasm") || it.name == "app.html"
                         }?.joinToString(",") { it.name } ?: ""

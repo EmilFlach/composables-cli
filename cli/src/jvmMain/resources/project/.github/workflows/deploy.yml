@@ -39,38 +39,9 @@ jobs:
         run: ./gradlew :composeApp:wasmJsBrowserDistribution
 
       - name: Prepare preview template
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.number }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_DESCRIPTION: ${{ github.event.pull_request.body }}
         run: |
           DIST_DIR="composeApp/build/dist/wasmJs/productionExecutable"
-          cp composeApp/src/wasmJsMain/resources/preview.html $DIST_DIR/preview.html
-          
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            python3 <<EOF
-          import os
-          path = "$DIST_DIR/preview.html"
-          with open(path, "r") as f:
-              content = f.read()
-          content = content.replace("{{PR_TITLE}}", os.environ.get("PR_TITLE", ""))
-          content = content.replace("{{PR_NUMBER}}", str(os.environ.get("PR_NUMBER", "")))
-          content = content.replace("{{PR_AUTHOR}}", os.environ.get("PR_AUTHOR", ""))
-          content = content.replace("{{PR_BRANCH}}", os.environ.get("PR_BRANCH", ""))
-          content = content.replace("{{PR_URL}}", os.environ.get("PR_URL", ""))
-          content = content.replace("{{PR_DESCRIPTION}}", os.environ.get("PR_DESCRIPTION", ""))
-          content = content.replace("{{HIDE_PR_PANEL}}", "")
-          with open(path, "w") as f:
-              f.write(content)
-          EOF
-          else
-            sed -i "s/{{HIDE_PR_PANEL}}/hidden/g" $DIST_DIR/preview.html
-          fi
-          
-          mv $DIST_DIR/preview.html $DIST_DIR/index.html
+          cp composeApp/src/webMain/resources/preview.html $DIST_DIR/index.html
 
       - name: Set deployment folder
         id: set-folder

@@ -257,6 +257,36 @@
             filter: grayscale(1);
         }
 
+        .sharing-container {
+            position: relative;
+            max-height: 250px;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+
+        .sharing-container.expanded {
+            max-height: 2000px;
+        }
+
+        .sharing-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            background: linear-gradient(to bottom, transparent, var(--bg-color));
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 20px;
+            transition: opacity 0.3s;
+        }
+
+        .sharing-container.expanded .sharing-overlay {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         @media (max-width: 768px) {
             h1 { font-size: 2.5rem; }
             .subtitle { font-size: 1.1rem; }
@@ -268,7 +298,7 @@
     <div class="container">
         <header>
             <h1>Instant Compose</h1>
-            <p class="subtitle">Start building your Compose app within a minute using any editor.</p>
+            <p class="subtitle">Start building your Compose app within a minute using any editor, share it on GitHub minutes later.</p>
             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
                 <a href="#installation" class="btn btn-primary">Get Started</a>
                 <a href="https://www.jetbrains.com/compose-multiplatform/" target="_blank" class="btn btn-secondary">Learn about Compose</a>
@@ -276,13 +306,27 @@
             </div>
         </header>
 
-        <div class="video-container">
-            <video autoplay muted loop playsinline poster="https://www.jetbrains.com/_assets/www/compose-multiplatform/images/img-header-desktop.6263d5eba2e6e31f2aae.png">
-                <source src="instant-cmp.mp4" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
+        <div class="video-section">
+            <h3 style="text-align: center; margin: 40px 0 20px; color: var(--text-muted); font-size: 1.2rem;">Quick Start</h3>
+            <div class="video-container" style="margin-top: 0;">
+                <video autoplay muted loop playsinline poster="https://www.jetbrains.com/_assets/www/compose-multiplatform/images/img-header-desktop.6263d5eba2e6e31f2aae.png">
+                    <source src="instant-compose-quickstart.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <p class="video-note">Parts of the video are sped up. Real time to first build takes about 40 seconds.</p>
         </div>
-        <p class="video-note">Parts of the video are sped up. Real time to first build was about 40 seconds.</p>
+
+        <div class="video-section">
+            <h3 style="text-align: center; margin: 40px 0 20px; color: var(--text-muted); font-size: 1.2rem;">Share with colleagues</h3>
+            <div class="video-container" style="margin-top: 0;">
+                <video autoplay muted loop playsinline poster="https://www.jetbrains.com/_assets/www/compose-multiplatform/images/img-header-desktop.6263d5eba2e6e31f2aae.png">
+                    <source src="instant-compose-sharing.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <p class="video-note">Automatically host your app on GitHub Pages and receive previews for each PR.</p>
+        </div>
 
         <section id="installation" class="section">
             <h2>Get Started</h2>
@@ -350,12 +394,85 @@
             </details>
         </section>
 
+        <section id="sharing" class="section">
+            <h2 style="font-size: 2rem; margin: 60px 0 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 10px;">Share with colleagues</h2>
+            
+            <div id="sharing-content" class="sharing-container">
+                <div class="step" style="margin-top: 20px;">
+                    <div class="step-header">
+                        <span class="step-number">1</span>
+                        <span class="step-title">Push your project to a <b>public</b> GitHub repository</span>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">2</span>
+                        <span class="step-title">Wait 10-15 minutes for the GitHub action to complete</span>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">3</span>
+                        <span class="step-title">Open the <code>Settings</code> > <code>Pages</code> of your GitHub repository</span>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">4</span>
+                        <span class="step-title">Select the <code>gh-pages</code> branch in the list and press Save</span>
+                    </div>
+                    <img src="github-pages-config.png" width="100%" style="border-radius: 8px; margin-top: 15px; border: 1px solid rgba(255,255,255,0.1);" alt="GitHub Pages configuration" />
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">5</span>
+                        <span class="step-title">Wait 5 minutes for the GitHub action to complete</span>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">6</span>
+                        <span class="step-title">Your app is now live!</span>
+                    </div>
+                    <p style="margin-top: 10px; color: var(--text-muted);">It will be available at <code>&lt;your_username&gt;.github.io/&lt;your_repo_name&gt;</code></p>
+                    <p style="margin-top: 10px; font-size: 0.9rem;">
+                        <a href="https://emilflach.github.io/instant-compose-example/" target="_blank" style="color: var(--kotlin-purple); text-decoration: none;">View Live Example &rarr;</a>
+                    </p>
+                </div>
+
+                <div class="step">
+                    <div class="step-header">
+                        <span class="step-number">7</span>
+                        <span class="step-title">Optional: Create a PR</span>
+                    </div>
+                    <p style="margin-top: 10px; color: var(--text-muted);">Receive a preview link as a comment on every Pull Request.</p>
+                    <p style="margin-top: 10px; font-size: 0.9rem;">
+                        <a href="https://emilflach.github.io/instant-compose-example/previews/pr-1/" target="_blank" style="color: var(--kotlin-purple); text-decoration: none;">View Preview Example &rarr;</a>
+                    </p>
+                    <img src="github-pr-comment.png" width="100%" style="border-radius: 8px; margin-top: 15px; border: 1px solid rgba(255,255,255,0.1);" alt="GitHub PR Comment Preview" />
+                </div>
+
+                <div class="sharing-overlay">
+                    <button class="btn btn-secondary" onclick="expandSharing()" style="background: var(--bg-color); border-color: var(--kotlin-purple);">View instructions</button>
+                </div>
+            </div>
+        </section>
+
         <footer class="footer">
             <p>Built on top of <a href="https://github.com/composablehorizons/composables-cli" target="_blank">composables-cli</a> by Alex Styl</p>
         </footer>
     </div>
 
     <script>
+        function expandSharing() {
+            document.getElementById('sharing-content').classList.add('expanded');
+        }
+
         function copyToClipboard(id) {
             const text = document.getElementById(id).innerText;
             navigator.clipboard.writeText(text).then(() => {

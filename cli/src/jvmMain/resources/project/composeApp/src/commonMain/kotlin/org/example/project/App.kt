@@ -38,7 +38,7 @@ fun App() {
                     )
                     Text(
                         text = "Edit App.kt to see live updates.",
-                        style = MaterialTheme.typography.displayMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center
                     )
                 }

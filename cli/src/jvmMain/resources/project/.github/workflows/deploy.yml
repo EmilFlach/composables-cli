@@ -1,0 +1,99 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Comment PR (Preparing)
+        if: github.event_name == 'pull_request'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            ⏳ Preview is being prepared...
+            This usually takes 10-15 minutes. Once ready, this comment will be updated with the link.
+          comment_tag: preview-link
+
+      - name: Build with Gradle
+        run: ./gradlew :composeApp:wasmJsBrowserDistribution
+
+      - name: Prepare preview template
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_DESCRIPTION: ${{ github.event.pull_request.body }}
+        run: |
+          DIST_DIR="composeApp/build/dist/wasmJs/productionExecutable"
+          cp composeApp/src/wasmJsMain/resources/preview.html $DIST_DIR/preview.html
+          
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            python3 <<EOF
+          import os
+          path = "$DIST_DIR/preview.html"
+          with open(path, "r") as f:
+              content = f.read()
+          content = content.replace("{{PR_TITLE}}", os.environ.get("PR_TITLE", ""))
+          content = content.replace("{{PR_NUMBER}}", str(os.environ.get("PR_NUMBER", "")))
+          content = content.replace("{{PR_AUTHOR}}", os.environ.get("PR_AUTHOR", ""))
+          content = content.replace("{{PR_BRANCH}}", os.environ.get("PR_BRANCH", ""))
+          content = content.replace("{{PR_URL}}", os.environ.get("PR_URL", ""))
+          content = content.replace("{{PR_DESCRIPTION}}", os.environ.get("PR_DESCRIPTION", ""))
+          content = content.replace("{{HIDE_PR_PANEL}}", "")
+          with open(path, "w") as f:
+              f.write(content)
+          EOF
+          else
+            sed -i "s/{{HIDE_PR_PANEL}}/hidden/g" $DIST_DIR/preview.html
+          fi
+          
+          mv $DIST_DIR/preview.html $DIST_DIR/index.html
+
+      - name: Set deployment folder
+        id: set-folder
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "folder=previews/pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "folder=." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: composeApp/build/dist/wasmJs/productionExecutable
+          branch: gh-pages
+          target-folder: ${{ steps.set-folder.outputs.folder }}
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            ✅ Preview ready!
+            Check out the changes here: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/previews/pr-${{ github.event.number }}/
+          comment_tag: preview-link
+          mode: recreate

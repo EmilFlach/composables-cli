@@ -167,7 +167,6 @@ suspend fun performRebuild(
             val processBuilder = ProcessBuilder(
                 gradlewPath,
                 ":composeApp:wasmJsBrowserDevelopmentExecutableDistribution",
-                "--rerun-tasks",
                 "--quiet",
                 "--console=rich",
                 "-Dorg.gradle.color=true",

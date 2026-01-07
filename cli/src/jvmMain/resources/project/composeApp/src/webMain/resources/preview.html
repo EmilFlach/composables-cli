@@ -46,6 +46,10 @@
             flex-shrink: 0;
         }
 
+        #pr-info.hidden {
+            display: none;
+        }
+
         .panel-content {
             padding: 24px;
         }
@@ -93,6 +97,7 @@
             margin-bottom: 24px;
             white-space: pre-wrap;
         }
+
 
         #main-content {
             flex-grow: 1;
@@ -209,7 +214,7 @@
             align-items: center;
             justify-content: center;
             padding: 40px;
-            overflow: hidden;
+            overflow: hidden; /* Changed from auto to prevent scrollbars */
             position: relative;
         }
 
@@ -241,28 +246,10 @@
             border: none;
             background: #fff;
             border-radius: 24px;
-            transition: opacity 0.2s ease-in-out;
         }
 
         #device-frame.desktop iframe {
             border-radius: 0;
-        }
-
-        .hidden-iframe {
-            opacity: 0;
-            pointer-events: none;
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            width: calc(100% - 24px);
-            height: calc(100% - 24px);
-        }
-
-        #device-frame.desktop .hidden-iframe {
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
         }
 
         .qr-section {
@@ -299,64 +286,6 @@
             word-break: break-all;
         }
 
-        #initial-loader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            flex-direction: column;
-            color: white;
-            font-family: sans-serif;
-            gap: 20px;
-        }
-
-        .big-spinner {
-            width: 48px;
-            height: 48px;
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-left-color: #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        #rebuilding-indicator {
-            display: none;
-            position: absolute;
-            top: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 24px;
-            font-family: sans-serif;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            align-items: center;
-            gap: 12px;
-            pointer-events: none;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-left-color: #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
         /* Mobile View - Hide everything but the app */
         @media (max-width: 1024px) {
             #side-panel, #top-bar {
@@ -377,18 +306,10 @@
             #device-frame iframe {
                 border-radius: 0;
             }
-            #rebuilding-indicator {
-                top: 12px;
-            }
         }
     </style>
 </head>
 <body>
-    <div id="initial-loader">
-        <div class="big-spinner"></div>
-        <span>Loading Application...</span>
-    </div>
-
     <div id="wrapper">
         <div id="side-panel">
             <div class="panel-content">
@@ -409,9 +330,9 @@
                         </svg>
                     </a>
                 </div>
-                <div class="dev-tag">Local Development</div>
+                <div class="dev-tag">Web Preview</div>
                 <h1>{{app_name}}</h1>
-                <div class="description">You are currently developing and previewing your application locally. Changes will be automatically reflected in the frame.</div>
+                <div class="description">You are currently previewing your application.</div>
                 <div class="description" style="font-size: 13px; margin-top: -8px; border-left: 2px solid var(--accent-color); padding-left: 12px; white-space: normal;">
                     <strong>Note:</strong> This is a web preview with limitations (e.g., no device features like Bluetooth). For faster reloads, native performance and all device features, <a href="https://kotlinlang.org/docs/multiplatform/quickstart.html" target="_blank" style="color: var(--accent-color); text-decoration: none;">setup your environment</a> and open this project in Android Studio.
                 </div>
@@ -450,122 +371,14 @@
             <button id="show-ui-btn" onclick="toggleUI(true)">Show Interface</button>
             <div id="preview-container">
                 <div id="device-frame" style="width: 393px; height: 851px;">
-                    <div id="rebuilding-indicator">
-                        <div class="spinner"></div>
-                        <div style="display: flex; flex-direction: column;">
-                            <span id="rebuild-status" style="font-weight: bold; font-size: 14px;">Rebuilding...</span>
-                            <span id="rebuild-timer" style="font-size: 12px; opacity: 0.8;">0.0s</span>
-                        </div>
-                    </div>
-                    <iframe id="current-app" src="app.html"></iframe>
+                    <iframe src="app.html"></iframe>
                 </div>
             </div>
         </div>
 
     </div>
 
-    <script type="application/javascript">
-        // --- Dev Shell Logic ---
-        const indicator = document.getElementById('rebuilding-indicator');
-        const statusElement = document.getElementById('rebuild-status');
-        const timerElement = document.getElementById('rebuild-timer');
-        const deviceFrame = document.getElementById('device-frame');
-        const initialLoader = document.getElementById('initial-loader');
-
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.hostname}:${window.location.port}/dev-server`;
-
-        let startTime = null;
-        let timerInterval = null;
-        let nextIframe = null;
-
-        function startTimer() {
-            if (timerInterval) return;
-            startTime = Date.now();
-            statusElement.innerText = 'Rebuilding...';
-            indicator.style.display = 'flex';
-            timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                timerElement.innerText = elapsed.toFixed(1) + 's';
-            }, 100);
-        }
-
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            indicator.style.display = 'none';
-        }
-
-        function swapIframes() {
-            if (!nextIframe) return;
-            
-            const currentIframe = document.getElementById('current-app');
-            
-            // Make next visible, current hidden
-            nextIframe.classList.remove('hidden-iframe');
-            currentIframe.classList.add('hidden-iframe');
-            
-            // After transition, cleanup old one
-            setTimeout(() => {
-                currentIframe.remove();
-                nextIframe.id = 'current-app';
-                nextIframe = null;
-                stopTimer();
-            }, 300);
-        }
-
-        window.addEventListener('message', (event) => {
-            if (event.data === 'compose-ready') {
-                if (initialLoader) {
-                    initialLoader.style.display = 'none';
-                }
-                if (nextIframe) {
-                    swapIframes();
-                } else {
-                    stopTimer();
-                }
-            }
-        });
-
-        function connect() {
-            const socket = new WebSocket(wsUrl);
-
-            socket.onmessage = function(event) {
-                const data = event.data;
-                if (data === 'rebuilding') {
-                    startTimer();
-                } else if (data.startsWith('reload')) {
-                    statusElement.innerText = 'Downloading...';
-                    const files = data.split(':')[1]?.split(',') || [];
-                    
-                    const downloadPromise = files.length > 0 
-                        ? Promise.all(files.map(file => fetch(file, { cache: 'reload' }).then(r => r.arrayBuffer())))
-                        : Promise.resolve();
-
-                    downloadPromise.then(() => {
-                        nextIframe = document.createElement('iframe');
-                        nextIframe.className = 'hidden-iframe';
-                        deviceFrame.appendChild(nextIframe);
-                        nextIframe.src = 'app.html';
-                    }).catch(err => {
-                        console.error('Failed to pre-fetch files, reloading current anyway:', err);
-                        window.location.reload();
-                    });
-                } else if (data === 'error') {
-                    stopTimer();
-                }
-            };
-
-            socket.onclose = function() {
-                setTimeout(connect, 1000);
-            };
-        }
-
-        connect();
-
-        // --- UI Logic (from preview.html) ---
+    <script>
         let currentDeviceType = 'android';
 
         function updateScale() {
@@ -577,15 +390,17 @@
                 return;
             }
 
-            const containerWidth = container.offsetWidth - 80;
+            const containerWidth = container.offsetWidth - 80; // 40px padding on each side
             const containerHeight = container.offsetHeight - 80;
             
+            // Get original dimensions from style (removing 'px')
             const frameWidth = parseInt(frame.style.width);
             const frameHeight = parseInt(frame.style.height);
             
             if (isNaN(frameWidth) || isNaN(frameHeight)) return;
 
-            const totalWidth = frameWidth + 32;
+            // Include padding and border in calculation
+            const totalWidth = frameWidth + 32; // 12px padding * 2 + 4px border * 2
             const totalHeight = frameHeight + 32;
 
             const scaleX = containerWidth / totalWidth;
@@ -616,6 +431,7 @@
                 frame.style.height = height + 'px';
                 desktopBtn.classList.remove('active');
                 
+                // Clear other selects
                 selects.forEach(s => {
                     const onchangeAttr = s.getAttribute('onchange');
                     if (!onchangeAttr || onchangeAttr.indexOf(type) === -1) {
@@ -627,6 +443,7 @@
                 });
             }
             
+            // Use setTimeout to ensure DOM has updated before calculating scale
             setTimeout(updateScale, 0);
         }
 
@@ -653,7 +470,7 @@
         const currentUrl = window.location.href;
 
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            qrSection.style.display = 'none';
+            if (qrSection) qrSection.style.display = 'none';
         } else {
             qrUrlDisplay.innerText = currentUrl;
             new QRCode(document.getElementById("qr-code"), {
@@ -665,6 +482,7 @@
                 correctLevel : QRCode.CorrectLevel.H
             });
         }
+
 
         // Initialize scale
         updateScale();

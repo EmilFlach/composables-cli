@@ -9,16 +9,33 @@ JAR_NAME="instant-compose.jar"
 WRAPPER_NAME="instant-compose"
 
 # Colors
-RED='\033[0;31m'  # Standard red for errors
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-NC='\033[0m'      # No Color
+DIM='\033[2m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+# Spinner function
+spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr='|/-\'
+    while [ "$(ps -p $pid -o state= 2>/dev/null)" ]; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
 
 setup_java() {
-    echo "Checking for Java..."
+    printf "Checking for Java... "
     
-    JAVA_REQUIRED_VERSION=17
+    JAVA_REQUIRED_VERSION=21
     JAVA_VERSION=""
 
     if command -v java &> /dev/null; then
@@ -30,74 +47,71 @@ setup_java() {
     fi
 
     if [ -n "$JAVA_VERSION" ] && [ "$JAVA_VERSION" -ge "$JAVA_REQUIRED_VERSION" ]; then
-        echo "✓ Java $JAVA_VERSION detected"
+        echo -e "${GREEN}Java $JAVA_VERSION detected${NC}"
         return 0
     fi
 
     if [ -n "$JAVA_VERSION" ]; then
         echo -e "${YELLOW}Warning: Java $JAVA_VERSION detected, but Java $JAVA_REQUIRED_VERSION or higher is required.${NC}"
     else
-        echo -e "${YELLOW}Java not found.${NC}"
+        echo -e "${YELLOW}Not found${NC}"
     fi
 
-    echo "Attempting to install Java $JAVA_REQUIRED_VERSION..."
+    printf "Installing Java $JAVA_REQUIRED_VERSION... "
 
+    (
     if [[ "$OSTYPE" == "darwin"* ]]; then
         if ! command -v brew &> /dev/null; then
-            echo -e "${RED}Error: Homebrew is required to install Java on macOS.${NC}"
-            echo "Please install Homebrew from https://brew.sh/ or install Java manually from https://www.oracle.com/java/technologies/downloads/"
+            echo -e "${RED}Error: Homebrew is required to install Java on macOS.${NC}" >&2
             exit 1
         fi
 
-        echo "Installing OpenJDK 17 via Homebrew..."
-        brew install openjdk@17
+        brew install openjdk@21 &>/dev/null
 
-        echo "Linking OpenJDK..."
-        ln -sfn /usr/local/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk 2>/dev/null || \
-        ln -sfn /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
-
-        # Add to current path for verification
-        export PATH="/usr/local/opt/openjdk@17/bin:$PATH"
-        export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+        ln -sfn /usr/local/opt/openjdk@21/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk 2>/dev/null || \
+        ln -sfn /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         if command -v apt-get &> /dev/null; then
-            echo "Installing OpenJDK 17 via apt..."
-            apt-get update && apt-get install -y openjdk-17-jdk
+            apt-get update && apt-get install -y openjdk-21-jdk
         elif command -v dnf &> /dev/null; then
-            echo "Installing OpenJDK 17 via dnf..."
-            dnf install -y java-17-openjdk-devel
+            dnf install -y java-21-openjdk-devel
         elif command -v yum &> /dev/null; then
-            echo "Installing OpenJDK 17 via yum..."
-            yum install -y java-17-openjdk-devel
+            yum install -y java-21-openjdk-devel
         else
-            echo -e "${RED}Error: Unsupported package manager.${NC}"
-            echo "Please install Java 17 or higher manually."
+            echo -e "${RED}Error: Unsupported package manager.${NC}" >&2
             exit 1
         fi
     else
-        echo -e "${RED}Error: Unsupported operating system ($OSTYPE).${NC}"
-        echo "Please install Java 17 or higher manually."
+        echo -e "${RED}Error: Unsupported operating system ($OSTYPE).${NC}" >&2
         exit 1
     fi
-
+    ) &> /tmp/instant-compose-install.log &
+    
+    spinner $!
+    
     # Final verification
-    if command -v java &> /dev/null; then
+    if command -v java &> /dev/null || [ -f "/opt/homebrew/opt/openjdk@21/bin/java" ] || [ -f "/usr/local/opt/openjdk@21/bin/java" ]; then
+        # Update path for current session if we just installed it on macOS
+        export PATH="/usr/local/opt/openjdk@21/bin:$PATH"
+        export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
+        
         NEW_JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d '"' -f 2 | cut -d '.' -f 1)
         if [ "$NEW_JAVA_VERSION" = "1" ]; then
             NEW_JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d '"' -f 2 | cut -d '.' -f 2)
         fi
         
         if [ "$NEW_JAVA_VERSION" -ge "$JAVA_REQUIRED_VERSION" ]; then
-            echo -e "${GREEN}✓ Java $NEW_JAVA_VERSION installed successfully!${NC}"
+            echo -e "${GREEN}DONE (Java $NEW_JAVA_VERSION)${NC}"
             return 0
         fi
     fi
 
-    echo -e "${RED}Error: Java installation failed or version is still incorrect.${NC}"
+    echo -e "${RED}FAILED${NC}"
+    cat /tmp/instant-compose-install.log
     exit 1
 }
 
-echo "Installing Instant Compose..."
+echo -e "${BOLD}Installing Instant Compose CLI${NC}"
 
 # Check for required commands
 if ! command -v curl &> /dev/null; then
@@ -111,37 +125,29 @@ setup_java
 mkdir -p "$INSTALL_DIR"
 
 # Detect latest version
-echo "Fetching latest version..."
+printf "Fetching latest version... "
 LATEST_VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${RED}Failed to fetch latest version from GitHub API${NC}"
+    echo -e "${RED}FAILED${NC}"
     echo "Please check your internet connection and try again"
     exit 1
 fi
-
-echo "Latest version: $LATEST_VERSION"
+echo -e "${GREEN}$LATEST_VERSION${NC}"
 
 # Download JAR
 JAR_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/$JAR_NAME"
-echo "Downloading from $JAR_URL..."
+printf "Downloading... "
 
-if ! curl -fSL --progress-bar "$JAR_URL" -o "$INSTALL_DIR/$JAR_NAME"; then
-    echo -e "${RED}Failed to download $JAR_NAME${NC}"
+if ! curl -fSL -s "$JAR_URL" -o "$INSTALL_DIR/$JAR_NAME"; then
+    echo -e "${RED}FAILED${NC}"
     echo "Please check if the version $LATEST_VERSION exists and contains $JAR_NAME"
     exit 1
 fi
-
-# Verify JAR was downloaded
-if [ ! -f "$INSTALL_DIR/$JAR_NAME" ]; then
-    echo -e "${RED}Error: Downloaded file not found${NC}"
-    exit 1
-fi
-
-echo "✓ Downloaded $JAR_NAME"
+echo -e "${GREEN}DONE${NC}"
 
 # Create wrapper script
-echo "Creating wrapper script..."
+printf "Setting up... "
 cat > "$INSTALL_DIR/$WRAPPER_NAME" << EOF
 #!/bin/bash
 # Instant Compose CLI wrapper
@@ -149,6 +155,7 @@ exec java -jar "\$HOME/.instant-compose/bin/$JAR_NAME" "\$@"
 EOF
 
 chmod +x "$INSTALL_DIR/$WRAPPER_NAME"
+echo -e "${GREEN}DONE${NC}"
 
 # Detect shell and update PATH
 SHELL_RC=""
@@ -177,35 +184,34 @@ if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
         echo "" >> "$SHELL_RC"
         echo "# Instant Compose" >> "$SHELL_RC"
         echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
-        echo "Added Instant Compose to PATH in $SHELL_RC"
-    else
-        echo "Instant Compose already in PATH"
+        echo -e "${DIM}Added to PATH in $SHELL_RC${NC}"
     fi
 elif [ -n "$SHELL_RC" ]; then
-        echo "Shell config file $SHELL_RC not found. Creating it..."
+    echo -e "${DIM}Creating $SHELL_RC and adding to PATH...${NC}"
     touch "$SHELL_RC"
     echo "" >> "$SHELL_RC"
     echo "# Instant Compose" >> "$SHELL_RC"
     echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
-    echo "Created $SHELL_RC and added Instant Compose to PATH"
 fi
 
 # Make it immediately available for current session
 export PATH="$INSTALL_DIR:$PATH"
 
 # Test installation
-echo -e "${BLUE}Testing installation...${NC}"
+printf "Verifying... "
 if command -v instant-compose &> /dev/null; then
-    echo "✓ Instant Compose installed successfully!"
+    echo -e "${GREEN}SUCCESS${NC}"
     echo ""
-    echo "Usage:"
-    echo "  instant-compose --help               - Show all available commands"
+    echo -e "${GREEN}${BOLD}✓ Instant Compose installed successfully!${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  instant-compose --help"
     echo ""
     if [ -n "$SHELL_RC" ]; then
-        echo "Note: Restart your terminal or run 'source $SHELL_RC' to use instant-compose from anywhere"
+        echo -e "${DIM}Note: Restart your terminal or run 'source $SHELL_RC' to use it from anywhere${NC}"
     fi
 else
-    echo -e "${RED}Error: Installation verification failed${NC}"
-    echo "Please try running: export PATH=\"$INSTALL_DIR:\$PATH\""
+    echo -e "${RED}FAILED${NC}"
+    echo -e "Please try running: export PATH=\"$INSTALL_DIR:\$PATH\""
     exit 1
 fi

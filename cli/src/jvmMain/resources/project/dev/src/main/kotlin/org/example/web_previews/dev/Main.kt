@@ -29,7 +29,6 @@ fun main() {
     while (!serverStarted && currentPort < 8100) {
         try {
             val localIp = getLocalIpAddress()
-            val localUrl = "http://localhost:$currentPort"
             val networkUrl = localIp?.let { "http://$it:$currentPort" }
 
             val buildInProgress = AtomicBoolean(false)
@@ -54,14 +53,11 @@ fun main() {
             System.out.flush()
 
             println("=".repeat(50))
-            println("Server started on port $currentPort!")
             networkUrl?.let {
                 println("\nScan the QR code below to view on your phone:")
                 println(generateQrCodeAscii(it))
-                println("Local:   $localUrl")
-                println("Network: $it")
+                println("Link: $it")
             }
-            println("")
             println("")
             println("Use Android Studio and the KMP Plugin for faster reloads and actual native performance!")
             println("")
@@ -306,9 +302,23 @@ fun generateQrCodeAscii(text: String): String {
     val width = bitMatrix.width
     val height = bitMatrix.height
     val sb = StringBuilder()
-    for (y in 0 until height) {
+    
+    // Using half-block characters to make it smaller
+    // ▀ = top half black, bottom half white
+    // ▄ = top half white, bottom half black
+    // █ = both halves black
+    // ' ' = both halves white
+    for (y in 0 until height step 2) {
         for (x in 0 until width) {
-            sb.append(if (bitMatrix.get(x, y)) "██" else "  ")
+            val top = bitMatrix.get(x, y)
+            val bottom = if (y + 1 < height) bitMatrix.get(x, y + 1) else false
+            
+            when {
+                top && bottom -> sb.append("█")
+                top -> sb.append("▀")
+                bottom -> sb.append("▄")
+                else -> sb.append(" ")
+            }
         }
         sb.append("\n")
     }

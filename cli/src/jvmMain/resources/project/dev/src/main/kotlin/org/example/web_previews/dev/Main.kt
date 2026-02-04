@@ -45,7 +45,6 @@ fun main() {
             }
             
             // Re-clear screen after initial build to remove any lingering Gradle artifacts
-            System.`out`.print("\u001b[H\u001b[2J\u001b[3J")
             System.`out`.flush()
             
             System.`out`.println("=".repeat(50))
@@ -309,25 +308,43 @@ fun generateQrCodeAscii(text: String): String {
     val width = bitMatrix.width
     val height = bitMatrix.height
     val sb = StringBuilder()
-    
-    // Using half-block characters to make it smaller
-    // ▀ = top half black, bottom half white
-    // ▄ = top half white, bottom half black
-    // █ = both halves black
-    // ' ' = both halves white
-    for (y in 0 until height step 2) {
-        for (x in 0 until width) {
-            val top = bitMatrix.get(x, y)
-            val bottom = if (y + 1 < height) bitMatrix.get(x, y + 1) else false
-            
-            when {
-                top && bottom -> sb.append("█")
-                top -> sb.append("▀")
-                bottom -> sb.append("▄")
-                else -> sb.append(" ")
+
+    val useUnicode = System.getenv("TERM") != "dumb" &&
+            System.getProperty("file.encoding")?.lowercase() == "utf-8" &&
+            System.getenv("NO_UNICODE") == null
+
+    if (useUnicode) {
+        // Using half-block characters to make it smaller
+        // ▀ = top half black, bottom half white
+        // ▄ = top half white, bottom half black
+        // █ = both halves black
+        // ' ' = both halves white
+        for (y in 0 until height step 2) {
+            for (x in 0 until width) {
+                val top = bitMatrix.get(x, y)
+                val bottom = if (y + 1 < height) bitMatrix.get(x, y + 1) else false
+
+                when {
+                    top && bottom -> sb.append("█")
+                    top -> sb.append("▀")
+                    bottom -> sb.append("▄")
+                    else -> sb.append(" ")
+                }
             }
+            sb.append("\n")
         }
-        sb.append("\n")
+    } else {
+        // Fallback for terminals that don't support Unicode
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (bitMatrix.get(x, y)) {
+                    sb.append("██")
+                } else {
+                    sb.append("  ")
+                }
+            }
+            sb.append("\n")
+        }
     }
     return sb.toString()
 }

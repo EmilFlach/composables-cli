@@ -50,7 +50,7 @@ fun main() {
             
             System.`out`.println("=".repeat(50))
             System.`out`.println("")
-            System.`out`.println("${"\u001B[1m"}${"\u001B[36m"}Instant Compose${"\u001B[0m"} ${"\u001B[1m"}${"\u001B[34m"} dev${"\u001B[0m"}")
+            System.`out`.println("${"\u001B[1m"}${"\u001B[36m"}Compose${"\u001B[0m"} ${"\u001B[1m"}${"\u001B[34m"} dev${"\u001B[0m"}")
             System.`out`.println("Running development server")
             System.`out`.println("")
             System.`out`.println("=".repeat(50))

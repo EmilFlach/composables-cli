@@ -4,9 +4,9 @@ set -e
 
 # Configuration
 REPO="EmilFlach/instant-compose"
-INSTALL_DIR="$HOME/.instant-compose/bin"
-JAR_NAME="instant-compose.jar"
-WRAPPER_NAME="instant-compose"
+INSTALL_DIR="$HOME/.compose/bin"
+JAR_NAME="compose.jar"
+WRAPPER_NAME="compose"
 
 # Colors
 RED='\033[0;31m'
@@ -85,7 +85,7 @@ setup_java() {
         echo -e "${RED}Error: Unsupported operating system ($OSTYPE).${NC}" >&2
         exit 1
     fi
-    ) &> /tmp/instant-compose-install.log &
+    ) &> /tmp/compose-install.log &
     
     spinner $!
     
@@ -107,11 +107,11 @@ setup_java() {
     fi
 
     echo -e "${RED}FAILED${NC}"
-    cat /tmp/instant-compose-install.log
+    cat /tmp/compose-install.log
     exit 1
 }
 
-echo -e "${BOLD}Installing Instant Compose CLI${NC}"
+echo -e "${BOLD}Installing Instant Compose${NC}"
 
 # Check for required commands
 if ! command -v curl &> /dev/null; then
@@ -150,8 +150,8 @@ echo -e "${GREEN}DONE${NC}"
 printf "Setting up... "
 cat > "$INSTALL_DIR/$WRAPPER_NAME" << EOF
 #!/bin/bash
-# Instant Compose CLI wrapper
-exec java -jar "\$HOME/.instant-compose/bin/$JAR_NAME" "\$@"
+# Compose CLI wrapper
+exec java -jar "\$HOME/.compose/bin/$JAR_NAME" "\$@"
 EOF
 
 chmod +x "$INSTALL_DIR/$WRAPPER_NAME"
@@ -180,18 +180,18 @@ esac
 
 # Add to PATH if shell config file exists
 if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
-    if ! grep -q ".instant-compose/bin" "$SHELL_RC"; then
+    if ! grep -q ".compose/bin" "$SHELL_RC"; then
         echo "" >> "$SHELL_RC"
-        echo "# Instant Compose" >> "$SHELL_RC"
-        echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
+        echo "# Compose" >> "$SHELL_RC"
+        echo "export PATH=\"\$HOME/.compose/bin:\$PATH\"" >> "$SHELL_RC"
         echo -e "${DIM}Added to PATH in $SHELL_RC${NC}"
     fi
 elif [ -n "$SHELL_RC" ]; then
     echo -e "${DIM}Creating $SHELL_RC and adding to PATH...${NC}"
     touch "$SHELL_RC"
     echo "" >> "$SHELL_RC"
-    echo "# Instant Compose" >> "$SHELL_RC"
-    echo "export PATH=\"\$HOME/.instant-compose/bin:\$PATH\"" >> "$SHELL_RC"
+    echo "# Compose" >> "$SHELL_RC"
+    echo "export PATH=\"\$HOME/.compose/bin:\$PATH\"" >> "$SHELL_RC"
 fi
 
 # Make it immediately available for current session
@@ -199,13 +199,13 @@ export PATH="$INSTALL_DIR:$PATH"
 
 # Test installation
 printf "Verifying... "
-if command -v instant-compose &> /dev/null; then
+if command -v compose &> /dev/null; then
     echo -e "${GREEN}SUCCESS${NC}"
     echo ""
-    echo -e "${GREEN}${BOLD}✓ Instant Compose installed successfully!${NC}"
+    echo -e "${GREEN}${BOLD}✓ Compose installed successfully!${NC}"
     echo ""
     echo -e "${BOLD}Usage:${NC}"
-    echo "  instant-compose --help"
+    echo "  compose --help"
     echo ""
     if [ -n "$SHELL_RC" ]; then
         echo -e "${DIM}Note: Restart your terminal or run 'source $SHELL_RC' to use it from anywhere${NC}"

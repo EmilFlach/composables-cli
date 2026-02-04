@@ -33,7 +33,7 @@ suspend fun main(args: Array<String>) {
         .main(args)
 }
 
-class ComposablesCli : CliktCommand(name = "instant-compose") {
+class ComposablesCli : CliktCommand(name = "compose") {
     init {
         versionOption(
             version = BuildConfig.Version,
@@ -56,13 +56,13 @@ class Update : CliktCommand("update") {
 
     override fun run() {
         try {
-            echo(bold(cyan("Instant Compose")) + " " + brightBlue("update"))
+            echo(bold(cyan("Compose")) + " " + brightBlue("update"))
             echo(white("Updating CLI tool"))
             echo("")
 
             val currentJarPath = this::class.java.protectionDomain.codeSource.location.path
             val installDir = File(currentJarPath).parent
-            val tempJar = File(installDir, "instant-compose.jar.tmp")
+            val tempJar = File(installDir, "compose.jar.tmp")
 
             echo(yellow("→ ") + "Updating CLI tool...")
             val latestVersion = ProcessBuilder(
@@ -83,7 +83,7 @@ class Update : CliktCommand("update") {
 
             val downloadProcess = ProcessBuilder(
                 "curl", "-fSL",
-                "https://github.com/EmilFlach/instant-compose/releases/download/$latestVersion/instant-compose.jar",
+                "https://github.com/EmilFlach/instant-compose/releases/download/$latestVersion/compose.jar",
                 "-o", tempJar.absolutePath
             ).inheritIO().start()
 
@@ -108,7 +108,7 @@ class Update : CliktCommand("update") {
 }
 
 class Init : CliktCommand("init") {
-    override fun help(context: Context): String = bold("Initializes a new Instant Compose project")
+    override fun help(context: Context): String = bold("Initializes a new Compose project")
 
     private val projectName by argument(name = "project-name").optional()
 
@@ -121,7 +121,7 @@ class Init : CliktCommand("init") {
             return
         }
 
-        echo(bold(cyan("Instant Compose")) + " " + brightBlue("init"))
+        echo(bold(cyan("Compose")) + " " + brightBlue("init"))
         echo(white("Initializing project: $name"))
         echo("")
 
@@ -143,7 +143,7 @@ class Init : CliktCommand("init") {
             echo("")
             echo(bold("To get started:"))
             echo(cyan("  cd $name"))
-            echo(cyan("  instant-compose dev"))
+            echo(cyan("  compose dev"))
         } catch (e: Exception) {
             echo(red("Failed to initialize project: ${e.message}"), err = true)
         }

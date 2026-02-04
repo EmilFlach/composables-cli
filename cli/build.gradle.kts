@@ -10,7 +10,7 @@ plugins {
     id("com.github.gmazzo.buildconfig") version "6.0.6"
 }
 val mainClassName = "com.composables.cli.CliKt"
-val cliName = "instant-compose"
+val cliName = "compose"
 
 group = "com.composables"
 version = libs.versions.composables.cli.get()

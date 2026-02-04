@@ -13,7 +13,7 @@ curl -fsSL https://emilflach.github.io/instant-compose/get.sh | bash
 ### 2. Create your app
 
 ```shell
-instant-compose init myApp
+compose init myApp
 cd myApp
 ./gradlew :dev:run
 ```

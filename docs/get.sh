@@ -163,14 +163,35 @@ CURRENT_SHELL=$(basename "$SHELL")
 
 case "$CURRENT_SHELL" in
     zsh)
-        SHELL_RC="$HOME/.zshrc"
+        # On macOS, zsh users often use .zprofile for PATH
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            if [ -f "$HOME/.zprofile" ]; then
+                SHELL_RC="$HOME/.zprofile"
+            else
+                SHELL_RC="$HOME/.zshrc"
+            fi
+        else
+            SHELL_RC="$HOME/.zshrc"
+        fi
         ;;
     bash)
         # On macOS, bash users often use .bash_profile
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            SHELL_RC="$HOME/.bash_profile"
+            if [ -f "$HOME/.bash_profile" ]; then
+                SHELL_RC="$HOME/.bash_profile"
+            elif [ -f "$HOME/.profile" ]; then
+                SHELL_RC="$HOME/.profile"
+            else
+                SHELL_RC="$HOME/.bash_profile"
+            fi
         else
-            SHELL_RC="$HOME/.bashrc"
+            if [ -f "$HOME/.bashrc" ]; then
+                SHELL_RC="$HOME/.bashrc"
+            elif [ -f "$HOME/.profile" ]; then
+                SHELL_RC="$HOME/.profile"
+            else
+                SHELL_RC="$HOME/.bashrc"
+            fi
         fi
         ;;
     *)
@@ -179,19 +200,22 @@ case "$CURRENT_SHELL" in
 esac
 
 # Add to PATH if shell config file exists
-if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
-    if ! grep -q ".compose/bin" "$SHELL_RC"; then
+if [ -n "$SHELL_RC" ]; then
+    if [ -f "$SHELL_RC" ]; then
+        if ! grep -q ".compose/bin" "$SHELL_RC"; then
+            echo "" >> "$SHELL_RC"
+            echo "# Compose" >> "$SHELL_RC"
+            echo "export PATH=\"\$HOME/.compose/bin:\$PATH\"" >> "$SHELL_RC"
+            echo -e "${DIM}Added to PATH in $SHELL_RC${NC}"
+        fi
+    else
+        echo -e "${DIM}Creating $SHELL_RC and adding to PATH...${NC}"
+        mkdir -p "$(dirname "$SHELL_RC")"
+        touch "$SHELL_RC"
         echo "" >> "$SHELL_RC"
         echo "# Compose" >> "$SHELL_RC"
         echo "export PATH=\"\$HOME/.compose/bin:\$PATH\"" >> "$SHELL_RC"
-        echo -e "${DIM}Added to PATH in $SHELL_RC${NC}"
     fi
-elif [ -n "$SHELL_RC" ]; then
-    echo -e "${DIM}Creating $SHELL_RC and adding to PATH...${NC}"
-    touch "$SHELL_RC"
-    echo "" >> "$SHELL_RC"
-    echo "# Compose" >> "$SHELL_RC"
-    echo "export PATH=\"\$HOME/.compose/bin:\$PATH\"" >> "$SHELL_RC"
 fi
 
 # Make it immediately available for current session
